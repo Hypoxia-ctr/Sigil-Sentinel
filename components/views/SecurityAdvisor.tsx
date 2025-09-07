@@ -138,7 +138,16 @@ const SecurityAdvisor: React.FC<SecurityAdvisorProps> = ({
     playConfirm();
     if (aiInsights[fixAction.id]?.loading) return;
 
-    setAiInsights(prev => ({ ...prev, [fixAction.id]: { loading: true, text: null, error: null, feedback: null }}));
+    setAiInsights(prev => ({
+        ...prev,
+        [fixAction.id]: {
+            ...prev[fixAction.id],
+            loading: true,
+            text: null,
+            error: null,
+            feedback: prev[fixAction.id]?.feedback || null,
+        }
+    }));
     
     const context = {
         signals: signals.map(s => ({ key: s.key, value: s.value, category: s.category })),
@@ -147,9 +156,9 @@ const SecurityAdvisor: React.FC<SecurityAdvisorProps> = ({
     const result = await explainWithGemini(fixAction.id, context);
 
     if (result.text.startsWith('Explain failed:')) {
-        setAiInsights(prev => ({ ...prev, [fixAction.id]: { ...prev[fixAction.id], loading: false, text: null, error: result.text }}));
+        setAiInsights(prev => ({ ...prev, [fixAction.id]: { ...prev[fixAction.id]!, loading: false, text: null, error: result.text }}));
     } else {
-        setAiInsights(prev => ({ ...prev, [fixAction.id]: { ...prev[fixAction.id], loading: false, text: result.text, error: null }}));
+        setAiInsights(prev => ({ ...prev, [fixAction.id]: { ...prev[fixAction.id]!, loading: false, text: result.text, error: null }}));
     }
   }, [signals, aiInsights, playConfirm, setAiInsights]);
 
@@ -171,7 +180,7 @@ const SecurityAdvisor: React.FC<SecurityAdvisorProps> = ({
 
     setAiInsights(prev => ({
         ...prev,
-        [fixId]: { ...prev[fixId], feedback: feedback }
+        [fixId]: { ...prev[fixId]!, feedback: feedback }
     }));
   };
 
