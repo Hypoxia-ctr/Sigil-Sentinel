@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useSound } from "../../hooks/useSound";
+import { useToast } from "../../hooks/useToast";
 
 const ClipboardCopyIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
@@ -83,6 +84,7 @@ export default function SystemHardener() {
   const [isApplying, setIsApplying] = useState(false);
   const [applyProgress, setApplyProgress] = useState(0);
   const { playClick, playConfirm, playHover } = useSound();
+  const { addToast } = useToast();
 
   const prevRef = useRef<Ward[] | null>(null);
   const [lastAppliedAt, setLastAppliedAt] = useState<number | null>(null);
@@ -126,6 +128,7 @@ export default function SystemHardener() {
     setLastAppliedAt(Date.now());
     playConfirm();
     setIsApplying(false);
+    addToast({ title: 'Profile Applied', message: 'All wards have been applied in the specified order.', type: 'success' });
   }
 
   function undoApply() {
@@ -134,12 +137,14 @@ export default function SystemHardener() {
     setWards(prevRef.current);
     prevRef.current = null;
     setLastAppliedAt(null);
+    addToast({ title: 'Undo Successful', message: 'The last "Apply Profile" action has been reverted.', type: 'info' });
   }
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
       playConfirm();
       setCopiedCmd(text);
+      addToast({ title: "Command Copied", message: "The command was copied to your clipboard.", type: "success" });
       setTimeout(() => setCopiedCmd(null), 2000);
     });
   };
@@ -194,6 +199,7 @@ export default function SystemHardener() {
                     prevRef.current = JSON.parse(JSON.stringify(wards));
                     setWards(cur => cur.map(c => c.id === w.id ? { ...c, applied: true } : c));
                     setLastAppliedAt(Date.now());
+                    addToast({ title: "Ward Status Updated", message: `Ward "${w.title}" is now marked as applied.`, type: "success" });
                   }}
                   className="btn text-sm"
                   disabled={isApplying}
@@ -206,6 +212,7 @@ export default function SystemHardener() {
                     playClick();
                     prevRef.current = JSON.parse(JSON.stringify(wards));
                     setWards(cur => cur.map(c => c.id === w.id ? { ...c, applied: false } : c));
+                    addToast({ title: "Ward Status Updated", message: `Ward "${w.title}" is now marked as not applied.`, type: "info" });
                   }}
                   className="btn text-sm"
                   aria-label={`Revert ward ${w.title}`}

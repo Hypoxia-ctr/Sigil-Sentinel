@@ -58,23 +58,22 @@ const getNodeColor = (group: string) => {
 
 const NetworkMap: React.FC = () => {
     const svgRef = useRef<SVGSVGElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
     const graphData = useRef<GraphData>(JSON.parse(JSON.stringify(mockGraphData)));
 
     useEffect(() => {
-        if (!svgRef.current) return;
+        const svgElement = svgRef.current;
+        const containerElement = containerRef.current;
+        if (!svgElement || !containerElement) return;
 
-        const width = svgRef.current.parentElement?.clientWidth || 500;
-        const height = svgRef.current.parentElement?.clientHeight || 300;
-        
         const nodes = graphData.current.nodes;
         const links = graphData.current.links;
 
         const simulation = d3.forceSimulation(nodes)
             .force('link', d3.forceLink(links).id((d: any) => d.id).distance(90))
-            .force('charge', d3.forceManyBody().strength(-150))
-            .force('center', d3.forceCenter(width / 2, height / 2));
+            .force('charge', d3.forceManyBody().strength(-150));
         
-        const svg = d3.select(svgRef.current);
+        const svg = d3.select(svgElement);
         svg.selectAll("*").remove(); // Clear previous render
 
         const linkGroup = svg.append("g")
@@ -115,15 +114,27 @@ const NetworkMap: React.FC = () => {
             .style("pointer-events", "none");
 
         simulation.on('tick', () => {
+            // FIX: Explicitly cast the datum `d` to the correct types (`Link` and `Node`)
+            // to resolve type errors where `d` was inferred as `unknown`.
+            // The simulation ensures that `source` and `target` are `Node` objects with `x` and `y` properties.
             linkGroup.selectAll("line")
-                .attr('x1', d => (d.source as any).x)
-                .attr('y1', d => (d.source as any).y)
-                .attr('x2', d => (d.target as any).x)
-                .attr('y2', d => (d.target as any).y);
+                .attr('x1', (d) => ((d as Link).source as Node).x!)
+                .attr('y1', (d) => ((d as Link).source as Node).y!)
+                .attr('x2', (d) => ((d as Link).target as Node).x!)
+                .attr('y2', (d) => ((d as Link).target as Node).y!);
 
             nodeGroup
-                .attr('transform', d => `translate(${d.x}, ${d.y})`);
+                .attr('transform', (d) => `translate(${(d as Node).x!}, ${(d as Node).y!})`);
         });
+        
+        const resizeObserver = new ResizeObserver(entries => {
+            if (entries[0]) {
+                const { width, height } = entries[0].contentRect;
+                simulation.force('center', d3.forceCenter(width / 2, height / 2));
+                simulation.alpha(0.3).restart();
+            }
+        });
+        resizeObserver.observe(containerElement);
 
         function drag(simulation: d3.Simulation<Node, undefined>) {
             function dragstarted(event: any, d: Node) {
@@ -158,11 +169,12 @@ const NetworkMap: React.FC = () => {
         return () => {
             simulation.stop();
             clearInterval(threatInterval);
+            resizeObserver.disconnect();
         };
     }, []);
 
     return (
-        <div className="w-full h-full" role="img" aria-label="Interactive network map visualization">
+        <div ref={containerRef} className="w-full h-full" role="img" aria-label="Interactive network map visualization">
             <svg ref={svgRef} className="w-full h-full"></svg>
         </div>
     );

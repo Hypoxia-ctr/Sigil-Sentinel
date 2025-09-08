@@ -17,7 +17,7 @@ const RefreshCcw: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
 
 type DetailsTab = 'details' | 'evidence' | 'oracle';
 const TAB_LABELS: Record<DetailsTab, string> = {
-    details: 'Details',
+    details: 'Threat Details',
     evidence: 'Evidence',
     oracle: 'Oracle Explanation'
 };
@@ -97,7 +97,20 @@ interface ThreatScannerProps {
   setOracleCache: React.Dispatch<React.SetStateAction<Record<string, AIInsightState>>>;
 }
 
-const FILTERS_STORAGE_KEY = 'sigil:threatscanner:filters';
+const FILTERS_STORAGE_KEY = 'ui:filters';
+
+function useDebounced<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+  return debouncedValue;
+}
 
 /** ----- Component ----- */
 const ThreatScanner: React.FC<ThreatScannerProps> = ({ onChangeView, oracleCache, setOracleCache }) => {
@@ -111,15 +124,15 @@ const ThreatScanner: React.FC<ThreatScannerProps> = ({ onChangeView, oracleCache
             return {
                 severity: parsed.severity ?? 'all',
                 source: parsed.source ?? 'all',
+                query: parsed.query ?? '',
             };
         }
     } catch {}
-    return { severity: 'all' as "all" | Severity | "unexplained", source: 'all' };
+    return { severity: 'all' as "all" | Severity | "unexplained", source: 'all', query: '' };
   });
-  // FIX: Destructured the `filters` state object with aliasing.
-  // The state object has `severity` and `source` keys, but the component uses
-  // `filterSeverity` and `filterSource` variable names.
-  const { severity: filterSeverity, source: filterSource } = filters;
+  
+  const { severity: filterSeverity, source: filterSource, query } = filters;
+  const debouncedQuery = useDebounced(query, 200);
   const { playClick, playConfirm, playHover } = useSound();
   const { addToast } = useToast();
 
@@ -142,9 +155,15 @@ const ThreatScanner: React.FC<ThreatScannerProps> = ({ onChangeView, oracleCache
     return threats.filter(t => {
       const severityMatch = filterSeverity === "all" || (filterSeverity === "unexplained" ? !oracleCache[t.id]?.text : t.severity === filterSeverity);
       const sourceMatch = filterSource === "all" || t.source === filterSource;
-      return severityMatch && sourceMatch;
+      const queryMatch = debouncedQuery.trim() === '' 
+        ? true 
+        : t.title.toLowerCase().includes(debouncedQuery.toLowerCase()) || 
+          (t.reason || '').toLowerCase().includes(debouncedQuery.toLowerCase()) ||
+          t.id.toLowerCase().includes(debouncedQuery.toLowerCase());
+          
+      return severityMatch && sourceMatch && queryMatch;
     });
-  }, [threats, filterSeverity, filterSource, oracleCache]);
+  }, [threats, filterSeverity, filterSource, oracleCache, debouncedQuery]);
 
   const handleExplain = async (threat: Threat) => {
     const insight = oracleCache[threat.id];
@@ -210,6 +229,10 @@ const ThreatScanner: React.FC<ThreatScannerProps> = ({ onChangeView, oracleCache
     setFilters(f => ({ ...f, source }));
   }
 
+  const handleQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFilters(f => ({ ...f, query: e.target.value }));
+  }
+
   return (
     <main className="threat-scanner p-4">
       <header className="threat-header flex flex-col gap-4">
@@ -238,6 +261,16 @@ const ThreatScanner: React.FC<ThreatScannerProps> = ({ onChangeView, oracleCache
               {sources.map(source => (
                 <button key={source} className={`pill capitalize ${filterSource === source ? "pill-active" : ""}`} onMouseEnter={playHover} onClick={() => handleSourceClick(source)}>{source}</button>
               ))}
+            </div>
+            <div className="relative flex-grow w-full sm:w-auto">
+                <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                <input
+                    type="text"
+                    value={query}
+                    onChange={handleQueryChange}
+                    placeholder="Search threats..."
+                    className="w-full bg-black/20 border border-zinc-700 rounded-full py-1.5 pl-9 pr-3 text-sm focus:ring-cyan-500 focus:border-cyan-500 transition-colors"
+                />
             </div>
         </div>
       </header>
@@ -318,9 +351,19 @@ const ExpandedThreatDetails: React.FC<{
     return (
         <div id={`details-${threat.id}`} role="region" aria-label={`${threat.title} details`} className="mt-3 border-t border-white/5 pt-2.5 animate-fade-in">
             <div className="flex items-center justify-between">
-                <div className="flex border-b border-zinc-700" role="tablist" aria-label="Threat Details">
+                <div className="flex border-b border-zinc-700" role="tablist" aria-label="Threat Details Information">
                     {(['details', 'evidence', 'oracle'] as DetailsTab[]).map(tab => (
-                        <button key={tab} onMouseEnter={playHover} onClick={() => { playClick(); setActiveTab(tab); }} className={`px-4 py-2 text-sm capitalize transition-colors ${activeTab === tab ? 'border-b-2 border-cyan-400 text-cyan-300' : 'text-gray-400 hover:text-white'}`} role="tab" aria-selected={activeTab === tab}>{TAB_LABELS[tab]}</button>
+                        <button 
+                            key={tab} 
+                            onMouseEnter={playHover} 
+                            onClick={() => { playClick(); setActiveTab(tab); }} 
+                            className={`px-4 py-2 text-sm capitalize transition-colors ${activeTab === tab ? 'border-b-2 border-cyan-400 text-cyan-300' : 'text-gray-400 hover:text-white'}`} 
+                            role="tab" 
+                            aria-selected={activeTab === tab}
+                            aria-controls={`tab-panel-${threat.id}-${tab}`}
+                        >
+                            {TAB_LABELS[tab]}
+                        </button>
                     ))}
                 </div>
                  <div className="flex items-center gap-2">
@@ -331,7 +374,7 @@ const ExpandedThreatDetails: React.FC<{
                     <button className="btn ghost" onMouseEnter={playHover} onClick={() => { playClick(); onChangeView(View.SECURITY_ADVISOR); }}>Advisor</button>
                 </div>
             </div>
-            <div className="mt-3 p-3 bg-[#071019] rounded-lg min-h-[150px]" role="tabpanel">
+            <div id={`tab-panel-${threat.id}-${activeTab}`} className="mt-3 p-3 bg-[#071019] rounded-lg min-h-[150px]" role="tabpanel">
                 {activeTab === 'details' && (
                     <dl className="text-cyan-100 font-mono text-xs space-y-2">
                         <div>
