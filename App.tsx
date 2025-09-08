@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Navigation from './components/Navigation';
 // FIX: Imported Signal and FixAction from types.ts where they are defined, instead of from SecurityAdvisor.tsx
-import { View, Signal, FixAction } from './types';
+import { View, Signal, FixAction, AIInsightState } from './types';
 import Dashboard from './components/views/Dashboard';
 import FileAnalyzer from './components/views/FileAnalyzer';
 import SystemMonitor from './components/views/SystemMonitor';
-import SecurityAdvisor, { AIInsightState } from './components/views/SecurityAdvisor';
+import SecurityAdvisor from './components/views/SecurityAdvisor';
 import ThreatScanner from './components/views/ThreatScanner';
 import SystemHardener from './components/views/SystemHardener';
 import SubnetMessenger from './components/views/SubnetMessenger';
 import MLFrameworkDemo from './components/views/MLFrameworkDemo';
 import AegisHardener from './components/views/AegisHardener';
 import AdminConsole from './components/views/AdminConsole';
+import DataLossPrevention from './components/views/DataLossPrevention';
 import { CommandPalette, Command } from './components/CommandPalette';
 import { NAVIGATION_ITEMS } from './constants';
 import SigilLibrary from './components/SigilLibrary';
@@ -28,6 +29,8 @@ const mockSignals: Signal[] = [
   { key: 'endpoint.antivirus', label: 'Antivirus', category: 'Endpoint', value: 'active' }
 ];
 
+const ORACLE_CACHE_KEY = 'sigil-sentinel-oracle-cache';
+
 const AppContent: React.FC = () => {
   const [view, setView] = useState<View>(() => {
     const savedView = localStorage.getItem('sigil-active-view');
@@ -40,7 +43,17 @@ const AppContent: React.FC = () => {
   const [activeSigil, setActiveSigil] = useState<SigilName>('warding');
   const [isSigilLibraryOpen, setSigilLibraryOpen] = useState(false);
   const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [aiInsights, setAiInsights] = useState<Record<string, AIInsightState>>({});
+  
+  const [oracleCache, setOracleCache] = useState<Record<string, AIInsightState>>(() => {
+    try {
+      const cachedData = localStorage.getItem(ORACLE_CACHE_KEY);
+      return cachedData ? JSON.parse(cachedData) : {};
+    } catch (error) {
+      console.warn('Failed to parse oracle cache from localStorage', error);
+      return {};
+    }
+  });
+
   const { addToast } = useToast();
   
   usePreserveScroll("sigil:scroll:main", "main", { debounceMs: 140 });
@@ -48,6 +61,15 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('sigil-active-view', view);
   }, [view]);
+
+  // Persist oracle cache to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(ORACLE_CACHE_KEY, JSON.stringify(oracleCache));
+    } catch (error) {
+      console.warn('Failed to save oracle cache to localStorage', error);
+    }
+  }, [oracleCache]);
 
   // Load/save active sigil
   useEffect(() => {
@@ -78,7 +100,7 @@ const AppContent: React.FC = () => {
   }, []);
 
   const handleClearOracleCache = useCallback(() => {
-    setAiInsights({});
+    setOracleCache({});
     addToast({ title: 'Oracle Cache Cleared', message: 'All cached explanations have been removed.', type: 'info' });
   }, [addToast]);
 
@@ -128,13 +150,14 @@ const AppContent: React.FC = () => {
       case View.DASHBOARD: return <Dashboard onChangeView={setView} />;
       case View.FILE_ANALYZER: return <FileAnalyzer onChangeView={setView} />;
       case View.SYSTEM_MONITOR: return <SystemMonitor />;
-      case View.SECURITY_ADVISOR: return <SecurityAdvisor signals={mockSignals} onRequestFix={handleRequestFix} aiInsights={aiInsights} setAiInsights={setAiInsights} onClearOracleCache={handleClearOracleCache} />;
-      case View.THREAT_SCANNER: return <ThreatScanner onChangeView={setView} />;
+      case View.SECURITY_ADVISOR: return <SecurityAdvisor signals={mockSignals} onRequestFix={handleRequestFix} oracleCache={oracleCache} setOracleCache={setOracleCache} onClearOracleCache={handleClearOracleCache} />;
+      case View.THREAT_SCANNER: return <ThreatScanner onChangeView={setView} oracleCache={oracleCache} setOracleCache={setOracleCache} />;
       case View.SYSTEM_HARDENER: return <SystemHardener />;
       case View.SUBNET_MESSENGER: return <SubnetMessenger />;
       case View.ML_FRAMEWORK_DEMO: return <MLFrameworkDemo />;
       case View.AEGIS_HARDENER: return <AegisHardener />;
       case View.ADMIN_CONSOLE: return <AdminConsole />;
+      case View.DATA_LOSS_PREVENTION: return <DataLossPrevention />;
       default: return <Dashboard onChangeView={setView} />;
     }
   };

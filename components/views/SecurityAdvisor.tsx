@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import { explainWithGemini } from "../../lib/api";
 import { defaultAdvicePack } from "../../lib/rules";
-import { Signal, FixAction, AdvicePack, Severity, Category } from "../../types";
+import { Signal, FixAction, AdvicePack, Severity, Category, AIInsightState } from "../../types";
 import { useSound } from "../../hooks/useSound";
 import SeveritySigil from "../SeveritySigil";
 import { useToast } from "../../hooks/useToast";
@@ -77,14 +77,6 @@ export const useCopyToClipboard = () => {
 };
 
 
-// --- AI Insight State ---
-export type AIInsightState = {
-    loading: boolean;
-    text: string | null;
-    error: string | null;
-    feedback: 'up' | 'down' | null;
-}
-
 /* ------------------------------------------------------------------
  *  UI component – SecurityAdvisor
  * ------------------------------------------------------------------*/
@@ -93,8 +85,8 @@ export interface SecurityAdvisorProps {
   packs?: AdvicePack[]; // default to [defaultAdvicePack]
   onRequestFix?: (fx: FixAction) => void;
   title?: string;
-  aiInsights: Record<string, AIInsightState>;
-  setAiInsights: React.Dispatch<React.SetStateAction<Record<string, AIInsightState>>>;
+  oracleCache: Record<string, AIInsightState>;
+  setOracleCache: React.Dispatch<React.SetStateAction<Record<string, AIInsightState>>>;
   onClearOracleCache: () => void;
 }
 
@@ -105,8 +97,8 @@ const SecurityAdvisor: React.FC<SecurityAdvisorProps> = ({
   packs = [defaultAdvicePack],
   onRequestFix,
   title = "Security Advisor",
-  aiInsights,
-  setAiInsights,
+  oracleCache,
+  setOracleCache,
   onClearOracleCache,
 }: SecurityAdvisorProps) => {
   const actions = useMemo(() => packs.flatMap(p => p.evaluate(signals)), [packs, signals]);
@@ -127,25 +119,35 @@ const SecurityAdvisor: React.FC<SecurityAdvisorProps> = ({
   }, [actions]);
 
   useEffect(() => {
-    const insightWithText = Object.values(aiInsights).find(i => i.text && !i.loading);
+    const insightWithText = Object.values(oracleCache).find(i => i.text && !i.loading);
     if (insightWithText) {
       insightRef.current?.focus();
     }
-  }, [aiInsights]);
+  }, [oracleCache]);
   
 
   const handleGetAIInsight = useCallback(async (fixAction: FixAction) => {
     playConfirm();
-    if (aiInsights[fixAction.id]?.loading) return;
+    const insight = oracleCache[fixAction.id];
+    if (insight?.loading) return;
 
-    setAiInsights(prev => ({
+    const TTL_MS = 24 * 60 * 60 * 1000;
+    if (insight?.text && insight.fetchedAt && (Date.now() - insight.fetchedAt < TTL_MS)) {
+        console.log(`[DevTest] cache hit: true`, {id: fixAction.id});
+        return;
+    }
+    console.log(`[DevTest] cache miss: true`, {id: fixAction.id});
+
+    const storedFeedback = localStorage.getItem(`sigil-feedback-pref:${fixAction.id}`) as 'up' | 'down' | null;
+
+    setOracleCache(prev => ({
         ...prev,
         [fixAction.id]: {
             ...prev[fixAction.id],
             loading: true,
             text: null,
             error: null,
-            feedback: prev[fixAction.id]?.feedback || null,
+            feedback: prev[fixAction.id]?.feedback || storedFeedback,
         }
     }));
     
@@ -156,15 +158,16 @@ const SecurityAdvisor: React.FC<SecurityAdvisorProps> = ({
     const result = await explainWithGemini(fixAction.id, context);
 
     if (result.text.startsWith('Explain failed:')) {
-        setAiInsights(prev => ({ ...prev, [fixAction.id]: { ...prev[fixAction.id]!, loading: false, text: null, error: result.text }}));
+        setOracleCache(prev => ({ ...prev, [fixAction.id]: { ...prev[fixAction.id]!, loading: false, text: null, error: result.text, fetchedAt: Date.now() }}));
     } else {
-        setAiInsights(prev => ({ ...prev, [fixAction.id]: { ...prev[fixAction.id]!, loading: false, text: result.text, error: null }}));
+        setOracleCache(prev => ({ ...prev, [fixAction.id]: { ...prev[fixAction.id]!, loading: false, text: result.text, error: null, fetchedAt: Date.now() }}));
+        console.log(`[DevTest] cache write: true`, {id: fixAction.id});
     }
-  }, [signals, aiInsights, playConfirm, setAiInsights]);
+  }, [signals, oracleCache, playConfirm, setOracleCache]);
 
   const handleFeedback = (fixId: string, feedback: 'up' | 'down') => {
     playClick();
-    const insight = aiInsights[fixId];
+    const insight = oracleCache[fixId];
     if (!insight || !insight.text) return;
     
     try {
@@ -178,7 +181,7 @@ const SecurityAdvisor: React.FC<SecurityAdvisorProps> = ({
         console.warn("Failed to save feedback to localStorage", e);
     }
 
-    setAiInsights(prev => ({
+    setOracleCache(prev => ({
         ...prev,
         [fixId]: { ...prev[fixId]!, feedback: feedback }
     }));
@@ -251,7 +254,7 @@ const SecurityAdvisor: React.FC<SecurityAdvisorProps> = ({
       ) : (
         <ul className="space-y-3" role="list">
           {filtered.map(fx => {
-            const insight = aiInsights[fx.id];
+            const insight = oracleCache[fx.id];
             const oracleButtonText = insight?.loading ? "Asking the Oracle..." : insight?.text ? "Refresh Oracle" : "Ask the Oracle";
             return (
             <li key={fx.id} className="hx-glow-border p-4 bg-zinc-900/60 transition-all duration-300" role="listitem">
@@ -289,7 +292,7 @@ const SecurityAdvisor: React.FC<SecurityAdvisorProps> = ({
                     {insight.loading && (
                         <div className="flex items-center gap-3 text-fuchsia-300">
                             <GeminiIcon className="h-5 w-5 animate-spin" />
-                            <p className="text-sm">The Oracle is contemplating your query...</p>
+                            <p className="text-sm">The Oracle is contemplating...</p>
                         </div>
                     )}
                     {insight.error && (
@@ -308,7 +311,7 @@ const SecurityAdvisor: React.FC<SecurityAdvisorProps> = ({
                                 {insight.text}
                             </pre>
                             <p className="text-xs text-zinc-400 mt-4 italic">
-                                Explained by Gemini Proxy on {new Date().toLocaleDateString()}.
+                                Explained by Gemini Proxy on {new Date(insight.fetchedAt || Date.now()).toLocaleDateString()}.
                             </p>
                             <div className="mt-4 flex items-center gap-4">
                                 <p className="text-xs text-zinc-400 m-0">Was this explanation helpful?</p>

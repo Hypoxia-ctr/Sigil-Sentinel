@@ -1,59 +1,45 @@
-/**
- * A secure fetch wrapper with a timeout mechanism.
- * @param input RequestInfo (URL)
- * @param init RequestInit options
- * @param ms Timeout in milliseconds
- * @returns Promise<Response>
- */
-async function fetchWithTimeout(input: RequestInfo, init?: RequestInit, ms = 12000): Promise<Response> {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), ms);
-  try {
-    const res = await fetch(input, { ...(init ?? {}), signal: controller.signal });
-    clearTimeout(id);
-    return res;
-  } catch (err) {
-    clearTimeout(id);
-    throw err;
-  }
-}
+import { GoogleGenAI } from "@google/genai";
 
 interface GeminiExplainResponse {
   text: string;
-  provenance: string;
-  model: string;
+  provenance?: string;
+  model?: string;
 }
 
 /**
- * Calls a server-side proxy to get an explanation from Gemini.
- * @param recId The record ID to explain.
- * @param context Additional context for the explanation.
+ * Calls the Gemini API to get an explanation for a security threat.
+ * @param recId The record ID to explain (used for context, though not sent to API).
+ * @param context Additional context about the threat for the explanation.
  * @returns A promise resolving to the explanation details.
  */
 export async function explainWithGemini(recId: string, context: Record<string, unknown> = {}): Promise<GeminiExplainResponse> {
   try {
-    const r = await fetchWithTimeout("/api/gemini/explain", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify({ recId, context }),
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+    const prompt = `You are a senior cybersecurity analyst called The Oracle.
+A security threat has been detected. Your role is to provide a concise and clear explanation of the potential impact and recommend specific actions for remediation.
+Do not use markdown formatting. Structure your response with clear headings for "Impact" and "Recommended Actions".
+
+Threat Details:
+${JSON.stringify(context, null, 2)}`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
     });
-
-    if (!r.ok) {
-      const t = await r.text().catch(() => "Could not retrieve error details.");
-      throw new Error(`Upstream error: ${r.status} ${t}`);
-    }
-
-    // A real implementation might return JSON, but for this app we adapt to the text-based proxy
-    const text = await r.text();
-    const prov = r.headers.get("X-Explain-Provenance") ?? "";
-    const model = r.headers.get("X-Explain-Model") ?? "";
     
-    return { text: text.slice(0, 4000), provenance: prov, model };
+    const text = response.text;
+
+    if (!text) {
+      throw new Error("Received an empty response from the Oracle.");
+    }
+    
+    return { text, model: 'gemini-2.5-flash' };
 
   } catch (err: any) {
     const errorMessage = err instanceof Error ? err.message : "The Oracle is silent. The connection was disturbed.";
-    console.error("Gemini proxy call failed", err);
-    return { text: `Explain failed: ${errorMessage}`, provenance: "", model: "" };
+    console.error("Gemini API call failed", err);
+    return { text: `Explain failed: ${errorMessage}` };
   }
 }
 

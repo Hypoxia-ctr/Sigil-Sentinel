@@ -17,15 +17,16 @@ const Dashboard: React.FC<{ onChangeView: (view: View) => void }> = ({ onChangeV
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
-      <SigilHeader />
+    <div className="space-y-6">
+      <div className="px-6 pt-6">
+        <SigilHeader />
+      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <ThreatVisionCard onChangeView={onChangeView} />
-        </div>
+      <div className="dashboard-grid">
+        {/* Row 1: Real-time visibility */}
+        <ThreatVisionCard onChangeView={onChangeView} />
         
-        <div className="card p-5 h-full flex flex-col">
+        <div className="card p-5 flex flex-col">
           <header>
             <div className="flex items-center justify-between">
               <h3 className="font-semibold tracking-wide text-cyan-100/90">Subnet Map</h3>
@@ -37,24 +38,23 @@ const Dashboard: React.FC<{ onChangeView: (view: View) => void }> = ({ onChangeV
             <NetworkMap />
           </div>
         </div>
-
+        
+        {/* Row 2: Analytical/historical data */}
         <AnomalySpark />
         <ThreatTrendsCard />
-        <SystemStatusCard />
-
-      </div>
-
-      <div>
-        {/* FIX: Casted style object to React.CSSProperties to allow for CSS custom properties. */}
-        <section className="p-5 hx-glow-border" style={{ '--glow-color': 'var(--mag)' } as React.CSSProperties}>
-            <h3 className="font-semibold tracking-wide text-cyan-100/90">Quick Actions</h3>
-             <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-                <button className="btn primary justify-center" onMouseEnter={playHover} onClick={() => handleActionClick(View.THREAT_SCANNER)}>Run Threat Scan</button>
-                <button className="btn justify-center" onMouseEnter={playHover} onClick={() => handleActionClick(View.SYSTEM_HARDENER)}>System Hardener</button>
-                <button className="btn justify-center" onMouseEnter={playHover} onClick={() => handleActionClick(View.FILE_ANALYZER)}>Analyze File</button>
-                <button className="btn ghost justify-center" onMouseEnter={playHover} onClick={() => handleActionClick(View.ADMIN_CONSOLE)}>Admin Console</button>
-            </div>
-        </section>
+        
+        {/* Row 3: Overarching system status */}
+        <div className="full-span">
+            <SystemStatusCard />
+        </div>
+        
+        {/* Row 4: Quick actions */}
+        <div className="full-span card quick-actions">
+            <button className="btn primary" onMouseEnter={playHover} onClick={() => handleActionClick(View.THREAT_SCANNER)}>Run Threat Scan</button>
+            <button className="btn" onMouseEnter={playHover} onClick={() => handleActionClick(View.SYSTEM_HARDENER)}>System Hardener</button>
+            <button className="btn" onMouseEnter={playHover} onClick={() => handleActionClick(View.FILE_ANALYZER)}>Analyze File</button>
+            <button className="btn ghost" onMouseEnter={playHover} onClick={() => handleActionClick(View.ADMIN_CONSOLE)}>Admin Console</button>
+        </div>
       </div>
     </div>
   );

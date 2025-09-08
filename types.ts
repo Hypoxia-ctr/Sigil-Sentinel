@@ -9,6 +9,7 @@ export enum View {
   ML_FRAMEWORK_DEMO = 'ML_FRAMEWORK_DEMO',
   AEGIS_HARDENER = 'AEGIS_HARDENER',
   ADMIN_CONSOLE = 'ADMIN_CONSOLE',
+  DATA_LOSS_PREVENTION = 'DATA_LOSS_PREVENTION',
 }
 
 // ----- Shared Security Types -----
@@ -68,3 +69,33 @@ export interface AdvicePack {
   title: string;
   evaluate: (signals: Signal[]) => FixAction[];
 }
+
+// ----- Data Loss Prevention Types -----
+export type DLPAction = 'Block' | 'Audit' | 'Encrypt';
+
+export interface DLPPolicy {
+  id: string;
+  name: string;
+  description: string;
+  keywords: string[];
+  action: DLPAction;
+  enabled: boolean;
+}
+
+export interface DLPIncident {
+  id: string;
+  timestamp: string;
+  policyId: string;
+  policyName: string;
+  contentSnippet: string;
+  action: DLPAction;
+}
+
+// ----- Oracle / AI Types -----
+export type AIInsightState = {
+    loading: boolean;
+    text: string | null;
+    error: string | null;
+    feedback: 'up' | 'down' | null;
+    fetchedAt?: number;
+};

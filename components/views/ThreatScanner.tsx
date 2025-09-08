@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState, useRef } from "react";
-import { View, Threat, Severity } from "../../types";
+import React, { useEffect, useMemo, useState } from "react";
+import { View, Threat, Severity, AIInsightState } from "../../types";
 import { explainWithGemini } from "../../lib/api";
 import SeveritySigil from "../SeveritySigil";
 import { useSound } from "../../hooks/useSound";
@@ -16,6 +16,12 @@ const RefreshCcw: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
 );
 
 type DetailsTab = 'details' | 'evidence' | 'oracle';
+const TAB_LABELS: Record<DetailsTab, string> = {
+    details: 'Details',
+    evidence: 'Evidence',
+    oracle: 'Oracle Explanation'
+};
+
 
 /** ----- helper: severity -> visuals ----- */
 function severityLabel(sev: Severity) {
@@ -61,6 +67,12 @@ const MOCK_THREATS: Threat[] = [
     source: "Network Monitor",
     severity: "medium",
     details: "Previous gateway 192.168.1.1 -> 192.168.1.254",
+    evidence: {
+      "interface": "eth0",
+      "old_gateway": "192.168.1.1",
+      "new_gateway": "192.168.1.254",
+      "process": "dhclient"
+    }
   },
   {
     id: "T-2025-0003",
@@ -70,28 +82,56 @@ const MOCK_THREATS: Threat[] = [
     source: "File Analyzer",
     severity: "critical",
     details: "SHA256: abcdef...; size 2.7MB; suspicious extension: .bin",
+    evidence: {
+        "file_path": "/tmp/installer.bin",
+        "sha256": "abcdef1234567890",
+        "size_bytes": 2700000,
+        "entropy_score": 7.85
+    }
   },
 ];
 
+interface ThreatScannerProps {
+  onChangeView: (view: View) => void;
+  oracleCache: Record<string, AIInsightState>;
+  setOracleCache: React.Dispatch<React.SetStateAction<Record<string, AIInsightState>>>;
+}
+
+const FILTERS_STORAGE_KEY = 'sigil:threatscanner:filters';
+
 /** ----- Component ----- */
-const ThreatScanner: React.FC<{ onChangeView: (view: View) => void }> = ({ onChangeView }) => {
+const ThreatScanner: React.FC<ThreatScannerProps> = ({ onChangeView, oracleCache, setOracleCache }) => {
   const [threats, setThreats] = useState<Threat[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [explainCache, setExplainCache] = useState<Record<string, { text: string; provenance?: string; model?: string; fetchedAt: string }>>({});
-  const [fetching, setFetching] = useState<Record<string, boolean>>({});
-  const [filterSeverity, setFilterSeverity] = useState<"all" | Severity | "unseen">("all");
-  const [filterSource, setFilterSource] = useState<string>("all");
+  const [filters, setFilters] = useState(() => {
+    try {
+        const raw = localStorage.getItem(FILTERS_STORAGE_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            return {
+                severity: parsed.severity ?? 'all',
+                source: parsed.source ?? 'all',
+            };
+        }
+    } catch {}
+    return { severity: 'all' as "all" | Severity | "unexplained", source: 'all' };
+  });
+  // FIX: Destructured the `filters` state object with aliasing.
+  // The state object has `severity` and `source` keys, but the component uses
+  // `filterSeverity` and `filterSource` variable names.
+  const { severity: filterSeverity, source: filterSource } = filters;
   const { playClick, playConfirm, playHover } = useSound();
   const { addToast } = useToast();
 
-  const debounceRef = useRef<number | null>(null);
-
   useEffect(() => {
     setThreats(MOCK_THREATS);
-    return () => {
-        if (debounceRef.current) window.clearTimeout(debounceRef.current);
-    }
   }, []);
+
+  useEffect(() => {
+    try {
+        localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
+    } catch {}
+  }, [filters]);
 
   const sources = useMemo(() => {
     const uniqueSources = new Set(threats.map(t => t.source).filter(Boolean));
@@ -100,17 +140,35 @@ const ThreatScanner: React.FC<{ onChangeView: (view: View) => void }> = ({ onCha
 
   const visible = useMemo(() => {
     return threats.filter(t => {
-      const severityMatch = filterSeverity === "all" || (filterSeverity === "unseen" ? !explainCache[t.id] : t.severity === filterSeverity);
+      const severityMatch = filterSeverity === "all" || (filterSeverity === "unexplained" ? !oracleCache[t.id]?.text : t.severity === filterSeverity);
       const sourceMatch = filterSource === "all" || t.source === filterSource;
       return severityMatch && sourceMatch;
     });
-  }, [threats, filterSeverity, filterSource, explainCache]);
+  }, [threats, filterSeverity, filterSource, oracleCache]);
 
   const handleExplain = async (threat: Threat) => {
-    if (fetching[threat.id]) return;
-    
+    const insight = oracleCache[threat.id];
+    if (insight?.loading) return;
+
+    const TTL_MS = 24 * 60 * 60 * 1000;
+    if (insight?.text && insight.fetchedAt && (Date.now() - insight.fetchedAt < TTL_MS)) {
+        console.log(`[DevTest] cache hit: true`, {id: threat.id});
+        setExpanded(e => ({ ...e, [threat.id]: true })); // Ensure it's visible if user clicks
+        return;
+    }
+    console.log(`[DevTest] cache miss: true`, {id: threat.id});
+
     playConfirm();
-    setFetching(f => ({ ...f, [threat.id]: true }));
+    setOracleCache(prev => ({
+        ...prev,
+        [threat.id]: {
+            ...(prev[threat.id] || { feedback: null }),
+            loading: true,
+            text: null,
+            error: null,
+        }
+    }));
+    
     const context = {
         source: threat.source,
         severity: threat.severity,
@@ -120,21 +178,12 @@ const ThreatScanner: React.FC<{ onChangeView: (view: View) => void }> = ({ onCha
     
     const res = await explainWithGemini(threat.id, context);
 
-    setExplainCache(prev => ({
-        ...prev,
-        [threat.id]: { ...res, fetchedAt: new Date().toISOString() },
-    }));
-    setExpanded(prev => ({ ...prev, [threat.id]: true }));
-    setFetching(f => ({ ...f, [threat.id]: false }));
-  };
-
-  const handleExplainDebounced = (threat: Threat) => {
-    if (explainCache[threat.id]) {
-      setExpanded(prev => ({ ...prev, [threat.id]: true }));
-      return;
+    if (res.text.startsWith('Explain failed:')) {
+        setOracleCache(prev => ({ ...prev, [threat.id]: { ...prev[threat.id]!, loading: false, text: null, error: res.text, fetchedAt: Date.now() }}));
+    } else {
+        setOracleCache(prev => ({ ...prev, [threat.id]: { ...prev[threat.id]!, loading: false, text: res.text, error: null, fetchedAt: Date.now() }}));
+        console.log(`[DevTest] cache write: true`, {id: threat.id});
     }
-    if (debounceRef.current) window.clearTimeout(debounceRef.current);
-    debounceRef.current = window.setTimeout(() => handleExplain(threat), 350);
   };
 
   function handleQueueFix(threat: Threat) {
@@ -151,14 +200,14 @@ const ThreatScanner: React.FC<{ onChangeView: (view: View) => void }> = ({ onCha
     }
   }
   
-  const handleFilterClick = (filter: "all" | Severity | "unseen") => {
+  const handleFilterClick = (severity: "all" | Severity | "unexplained") => {
     playClick();
-    setFilterSeverity(filter);
+    setFilters(f => ({ ...f, severity }));
   }
   
   const handleSourceClick = (source: string) => {
     playClick();
-    setFilterSource(source);
+    setFilters(f => ({ ...f, source }));
   }
 
   return (
@@ -182,7 +231,7 @@ const ThreatScanner: React.FC<{ onChangeView: (view: View) => void }> = ({ onCha
               <button className={`pill ${filterSeverity === "high" ? "pill-active" : ""}`} onMouseEnter={playHover} onClick={() => handleFilterClick("high")}>High</button>
               <button className={`pill ${filterSeverity === "medium" ? "pill-active" : ""}`} onMouseEnter={playHover} onClick={() => handleFilterClick("medium")}>Medium</button>
               <button className={`pill ${filterSeverity === "low" ? "pill-active" : ""}`} onMouseEnter={playHover} onClick={() => handleFilterClick("low")}>Low</button>
-              <button className={`pill ${filterSeverity === "unseen" ? "pill-active" : ""}`} onMouseEnter={playHover} onClick={() => handleFilterClick("unseen")}>Unexplained</button>
+              <button className={`pill ${filterSeverity === "unexplained" ? "pill-active" : ""}`} onMouseEnter={playHover} onClick={() => handleFilterClick("unexplained")}>Unexplained</button>
             </div>
              <div className="flex gap-2 items-center flex-wrap">
               <span className="text-sm text-gray-400">Source:</span>
@@ -221,9 +270,8 @@ const ThreatScanner: React.FC<{ onChangeView: (view: View) => void }> = ({ onCha
                     {isExpanded && (
                         <ExpandedThreatDetails
                             threat={threat}
-                            explainCache={explainCache}
-                            fetching={fetching}
-                            onExplain={handleExplainDebounced}
+                            oracleInsight={oracleCache[threat.id]}
+                            onExplain={handleExplain}
                             onQueueFix={handleQueueFix}
                             onChangeView={onChangeView}
                         />
@@ -255,44 +303,54 @@ const ThreatScanner: React.FC<{ onChangeView: (view: View) => void }> = ({ onCha
 
 const ExpandedThreatDetails: React.FC<{
     threat: Threat;
-    explainCache: Record<string, any>;
-    fetching: Record<string, boolean>;
+    oracleInsight: AIInsightState | undefined;
     onExplain: (t: Threat) => void;
     onQueueFix: (t: Threat) => void;
     onChangeView: (v: View) => void;
-}> = ({ threat, explainCache, fetching, onExplain, onQueueFix, onChangeView }) => {
+}> = ({ threat, oracleInsight, onExplain, onQueueFix, onChangeView }) => {
     const [activeTab, setActiveTab] = useState<DetailsTab>('details');
     const { playClick, playHover } = useSound();
-    // FIX: `addToast` was not defined. It's now available via the useToast hook.
     const { addToast } = useToast();
-    const cache = explainCache[threat.id];
-    const isFetching = Boolean(fetching[threat.id]);
-
-    useEffect(() => {
-        if(cache) {
-            setActiveTab('oracle');
-        }
-    }, [cache]);
+    const explanation = oracleInsight?.text;
+    const isFetching = oracleInsight?.loading;
+    const error = oracleInsight?.error;
 
     return (
         <div id={`details-${threat.id}`} role="region" aria-label={`${threat.title} details`} className="mt-3 border-t border-white/5 pt-2.5 animate-fade-in">
             <div className="flex items-center justify-between">
-                <div className="flex border-b border-zinc-700">
+                <div className="flex border-b border-zinc-700" role="tablist" aria-label="Threat Details">
                     {(['details', 'evidence', 'oracle'] as DetailsTab[]).map(tab => (
-                        <button key={tab} onClick={() => setActiveTab(tab)} className={`px-4 py-2 text-sm capitalize transition-colors ${activeTab === tab ? 'border-b-2 border-cyan-400 text-cyan-300' : 'text-gray-400 hover:text-white'}`}>{tab}</button>
+                        <button key={tab} onMouseEnter={playHover} onClick={() => { playClick(); setActiveTab(tab); }} className={`px-4 py-2 text-sm capitalize transition-colors ${activeTab === tab ? 'border-b-2 border-cyan-400 text-cyan-300' : 'text-gray-400 hover:text-white'}`} role="tab" aria-selected={activeTab === tab}>{TAB_LABELS[tab]}</button>
                     ))}
                 </div>
                  <div className="flex items-center gap-2">
-                    <button className="btn" onMouseEnter={playHover} onClick={() => { playClick(); navigator.clipboard?.writeText(JSON.stringify(threat)); addToast({ title: 'Evidence Copied', message: 'Threat details copied to clipboard.', type: 'success' }); }}>
-                        <ClipboardCopy className="h-4 w-4" /> Copy
+                    <button className="btn" onMouseEnter={playHover} onClick={() => { playClick(); navigator.clipboard?.writeText(JSON.stringify(threat, null, 2)); addToast({ title: 'Threat Data Copied', message: 'Threat details and evidence copied to clipboard.', type: 'success' }); }}>
+                        <ClipboardCopy className="h-4 w-4" /> Copy JSON
                     </button>
-                    <button className="btn primary" onMouseEnter={playHover} onClick={() => { playClick(); onQueueFix(threat); }}>Queue Fix</button>
+                    <button className="btn primary" onMouseEnter={playHover} onClick={() => { onQueueFix(threat); }}>Queue Fix</button>
                     <button className="btn ghost" onMouseEnter={playHover} onClick={() => { playClick(); onChangeView(View.SECURITY_ADVISOR); }}>Advisor</button>
                 </div>
             </div>
-            <div className="mt-3 p-3 bg-[#071019] rounded-lg min-h-[150px]">
+            <div className="mt-3 p-3 bg-[#071019] rounded-lg min-h-[150px]" role="tabpanel">
                 {activeTab === 'details' && (
-                    <pre className="whitespace-pre-wrap text-cyan-100 font-mono text-xs">{threat.details ?? "No raw details available."}</pre>
+                    <dl className="text-cyan-100 font-mono text-xs space-y-2">
+                        <div>
+                            <dt className="text-gray-400 font-sans">Reason:</dt>
+                            <dd className="pl-4">{threat.reason}</dd>
+                        </div>
+                        <div>
+                            <dt className="text-gray-400 font-sans">Source:</dt>
+                            <dd className="pl-4">{threat.source}</dd>
+                        </div>
+                        <div>
+                            <dt className="text-gray-400 font-sans">Detected At:</dt>
+                            <dd className="pl-4">{new Date(threat.detectedAt ?? '').toLocaleString()}</dd>
+                        </div>
+                        <div>
+                            <dt className="text-gray-400 font-sans">Raw Details:</dt>
+                            <dd className="pl-4 whitespace-pre-wrap">{threat.details ?? "No raw details provided."}</dd>
+                        </div>
+                    </dl>
                 )}
                 {activeTab === 'evidence' && (
                     <pre className="whitespace-pre-wrap text-cyan-100 font-mono text-xs">
@@ -301,20 +359,31 @@ const ExpandedThreatDetails: React.FC<{
                 )}
                 {activeTab === 'oracle' && (
                     <div>
-                        {cache ? (
+                        {isFetching ? (
+                            <div className="flex flex-col items-center justify-center h-[126px] text-center text-gray-400">
+                                <svg className="animate-spin h-8 w-8 text-cyan-400 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <span>The Oracle is contemplating...</span>
+                            </div>
+                        ) : error ? (
+                             <div className="p-3 rounded-lg bg-red-900/30 border border-red-500/30 text-red-300 text-sm">
+                               <p className="font-semibold">Error:</p>
+                               <p>{error}</p>
+                            </div>
+                        ) : explanation ? (
                             <div role="article" aria-live="polite" tabIndex={-1} className="whitespace-pre-wrap text-cyan-50">
-                                <pre className="m-0 whitespace-pre-wrap font-mono text-sm">{cache.text}</pre>
+                                <pre className="m-0 whitespace-pre-wrap font-mono text-sm">{explanation}</pre>
                                 <div className="mt-2 text-gray-400 text-xs">
-                                    {cache.provenance && <span>Provenance: {cache.provenance} • </span>}
-                                    {cache.model && <span>Model: {cache.model} • </span>}
-                                    <span>Fetched: {new Date(cache.fetchedAt).toLocaleString()}</span>
+                                    <span>Fetched: {new Date(oracleInsight?.fetchedAt || Date.now()).toLocaleString()}</span>
                                 </div>
                             </div>
                         ) : (
-                            <div className="flex flex-col items-center justify-center h-full text-center">
+                            <div className="flex flex-col items-center justify-center h-full text-center p-4">
                                 <p className="mb-4 text-gray-400">Ask the Oracle for an explanation of impact and recommended actions.</p>
-                                <button className="btn primary" onMouseEnter={playHover} onClick={() => { playClick(); onExplain(threat); }} disabled={isFetching}>
-                                    {isFetching ? "Explaining…" : "Explain with Gemini"}
+                                <button className="btn primary" onMouseEnter={playHover} onClick={() => { onExplain(threat); }} disabled={!!isFetching}>
+                                    Explain with Gemini
                                 </button>
                             </div>
                         )}

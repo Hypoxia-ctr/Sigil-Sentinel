@@ -175,6 +175,8 @@
         box-shadow: 0 2px 10px rgba(0, 255, 255, 0.15);
         backdrop-filter: blur(4px);
         transition: transform 0.3s ease, box-shadow 0.3s ease;
+        display: flex;
+        flex-direction: column;
       }
       .card:hover {
         transform: scale(1.02);
@@ -189,6 +191,33 @@
       .badge.mag { color: var(--mag); border-color: rgba(255, 59, 242, .35); }
       .badge.red { color: var(--red); border-color: rgba(239, 68, 68, .35); }
       
+      .dashboard-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto auto auto;
+        gap: 1.5rem;
+        padding: 1.5rem;
+      }
+
+      .dashboard-grid .full-span {
+        grid-column: 1 / -1;
+      }
+
+      .quick-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-around;
+        align-items: center;
+        gap: 1rem;
+        padding: 1.25rem;
+      }
+
+      .quick-actions .btn {
+        flex: 1;
+        min-width: 180px;
+        max-width: 250px;
+      }
+
       /* --- Old card styles for compatibility with non-dashboard views --- */
       .card-widget {
         background: linear-gradient(180deg, rgba(255,255,255,0.01), transparent);
@@ -339,6 +368,41 @@
         color: #a0a0a0;
       }
 
+      /* --- Data Loss Prevention View Styles --- */
+      .dlp-analyzer-output mark {
+        background-color: var(--amber);
+        color: var(--ink-900);
+        padding: 2px 4px;
+        border-radius: 4px;
+        font-weight: bold;
+      }
+      .dlp-modal-backdrop {
+        position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px);
+        z-index: 50; display: flex; justify-content: center; align-items: center; padding: 2rem;
+      }
+      .dlp-modal {
+        width: 100%; max-width: 560px; background-color: #0a0a14;
+        border: 1px solid rgba(255, 192, 67, 0.2); border-radius: 12px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.6), 0 0 30px rgba(255, 192, 67, 0.2);
+        overflow: hidden; display: flex; flex-direction: column;
+        animation: palette-in 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+      }
+      .toggle-switch {
+        position: relative; display: inline-block; width: 40px; height: 24px;
+      }
+      .toggle-switch input { opacity: 0; width: 0; height: 0; }
+      .toggle-slider {
+        position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+        background-color: #334155; border-radius: 24px; transition: .4s;
+      }
+      .toggle-slider:before {
+        position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px;
+        background-color: white; border-radius: 50%; transition: .4s;
+      }
+      input:checked + .toggle-slider { background-color: var(--amber); }
+      input:checked + .toggle-slider:before { transform: translateX(16px); }
+
+
       @media (prefers-reduced-motion: reduce) {
         *, *::before, *::after {
           animation-duration: 0.01ms !important;
@@ -355,7 +419,8 @@
     "react-dom/client": "https://esm.sh/react-dom@19.0.0-rc-f994737d14-20240522/client",
     "@google/genai": "https://esm.sh/@google/genai",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
-    "react/": "https://aistudiocdn.com/react@^19.1.1/"
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "d3": "https://esm.sh/d3@7"
   }
 }
 </script>
