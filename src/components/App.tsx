@@ -12,6 +12,7 @@ import AegisHardener from './views/AegisHardener';
 import AdminConsole from './views/AdminConsole';
 import DataLossPrevention from './views/DataLossPrevention';
 import AuditQueueView from './views/AuditQueueView';
+import SystemLog from './views/SystemLog';
 import { CommandPalette, Command } from './ui/CommandPalette';
 import { NAVIGATION_ITEMS } from '../lib/constants';
 import SigilLibrary from './ui/SigilLibrary';
@@ -154,6 +155,7 @@ const AppContent: React.FC = () => {
       case View.DASHBOARD: return <Dashboard onChangeView={setView} events={events} isConnected={isConnected} />;
       case View.FILE_ANALYZER: return <FileAnalyzer onChangeView={setView} />;
       case View.SYSTEM_MONITOR: return <SystemMonitor />;
+      case View.SYSTEM_LOG: return <SystemLog />;
       case View.SECURITY_ADVISOR: return <SecurityAdvisor signals={signals} onRequestFix={handleQueueFix} oracleCache={oracleCache} setOracleCache={setOracleCache} onClearOracleCache={handleClearOracleCache} />;
       case View.THREAT_SCANNER: return <ThreatScanner onChangeView={setView} oracleCache={oracleCache} setOracleCache={setOracleCache} onRequestFix={handleQueueFix} threats={threats} />;
       case View.SYSTEM_HARDENER: return <SystemHardener />;

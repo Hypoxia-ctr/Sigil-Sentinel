@@ -11,6 +11,7 @@ export enum View {
   ADMIN_CONSOLE = 'ADMIN_CONSOLE',
   DATA_LOSS_PREVENTION = 'DATA_LOSS_PREVENTION',
   AUDIT_QUEUE = 'AUDIT_QUEUE',
+  SYSTEM_LOG = 'SYSTEM_LOG',
 }
 
 // ----- Shared Security Types -----

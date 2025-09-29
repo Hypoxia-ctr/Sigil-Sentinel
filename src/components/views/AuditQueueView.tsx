@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { AuditQueueItem, Severity } from '../../types';
 import SeveritySigil from '../common/SeveritySigil';
 import { useSound } from '../../hooks/useSound';
@@ -10,11 +10,49 @@ interface AuditQueueViewProps {
   onUpdate: (timestamp: number, data: { title: string; severity: Severity }) => void;
 }
 
+type SortKey = 'timestamp' | 'severity';
+type SortDirection = 'asc' | 'desc';
+
+const SEVERITY_ORDER: Record<Severity, number> = {
+    'critical': 4,
+    'high': 3,
+    'medium': 2,
+    'low': 1,
+};
+
 const AuditQueueView: React.FC<AuditQueueViewProps> = ({ items, onRemove, onClear, onUpdate }) => {
     const { playClick, playHover, playConfirm } = useSound();
 
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editFormData, setEditFormData] = useState<{title: string, severity: Severity} | null>(null);
+    const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'timestamp', direction: 'desc' });
+
+    const sortedItems = useMemo(() => {
+        const sortableItems = [...items];
+        sortableItems.sort((a, b) => {
+            if (sortConfig.key === 'severity') {
+                const severityA = SEVERITY_ORDER[a.severity];
+                const severityB = SEVERITY_ORDER[b.severity];
+                if (severityA < severityB) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (severityA > severityB) return sortConfig.direction === 'asc' ? 1 : -1;
+            }
+            // Default/fallback sort is by timestamp
+            if (a.timestamp < b.timestamp) return sortConfig.direction === 'asc' ? -1 : 1;
+            if (a.timestamp > b.timestamp) return sortConfig.direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+        return sortableItems;
+    }, [items, sortConfig]);
+
+    const handleSort = (key: SortKey) => {
+        playClick();
+        setSortConfig(prev => {
+            if (prev.key === key) {
+                return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+            }
+            return { key, direction: 'desc' }; // Default to descending for new sort key
+        });
+    };
 
     const handleEditClick = (item: AuditQueueItem) => {
         playClick();
@@ -53,16 +91,27 @@ const AuditQueueView: React.FC<AuditQueueViewProps> = ({ items, onRemove, onClea
     <div className="p-6 space-y-4">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-amber-400 drop-shadow-[0_2px_4px_rgba(251,191,36,0.3)]">Audit Queue</h1>
-        <button onClick={handleClear} onMouseEnter={playHover} className="btn ghost" disabled={items.length === 0}>
-          Clear All
-        </button>
+        <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-400">Sort by:</span>
+                <button onClick={() => handleSort('timestamp')} className={`pill text-xs ${sortConfig.key === 'timestamp' ? 'pill-active' : ''}`}>
+                    Date {sortConfig.key === 'timestamp' && (sortConfig.direction === 'desc' ? '↓' : '↑')}
+                </button>
+                <button onClick={() => handleSort('severity')} className={`pill text-xs ${sortConfig.key === 'severity' ? 'pill-active' : ''}`}>
+                    Severity {sortConfig.key === 'severity' && (sortConfig.direction === 'desc' ? '↓' : '↑')}
+                </button>
+            </div>
+            <button onClick={handleClear} onMouseEnter={playHover} className="btn ghost" disabled={items.length === 0}>
+              Clear All
+            </button>
+        </div>
       </div>
 
-      {items.length === 0 ? (
+      {sortedItems.length === 0 ? (
         <div className="text-center text-gray-500 py-16">The audit queue is empty.</div>
       ) : (
         <div className="space-y-3">
-          {items.map(item => (
+          {sortedItems.map(item => (
             <div key={item.timestamp} className="card-widget card-ornamented flex items-center justify-between p-3 animate-fade-in">
                 {editingId === item.timestamp && editFormData ? (
                     // EDITING VIEW

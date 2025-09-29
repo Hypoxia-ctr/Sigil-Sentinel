@@ -27,6 +27,14 @@ export const NAVIGATION_ITEMS = [
     },
   },
   {
+    view: View.SYSTEM_LOG,
+    label: 'System Log',
+    icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h7" /></svg>,
+    theme: {
+      hover: 'group-hover:text-indigo-300',
+    },
+  },
+  {
     view: View.SECURITY_ADVISOR,
     label: 'Security Advisor',
     icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 20.944A12.02 12.02 0 0012 22a12.02 12.02 0 009-1.056c.343-.344.65-.724.93-1.127a11.956 11.956 0 01-2.312-7.822z" /></svg>,
