@@ -80,12 +80,14 @@ export async function getAnomalyScores(): Promise<{scores: number[]}> {
 
 export async function getSignals(): Promise<Signal[]> {
     console.log('[API MOCK] fetching /api/signals');
-    await new Promise(res => setTimeout(res, 400)); // Simulate network delay
+    await new Promise(res => setTimeout(res, 400));
+    if (Math.random() > 0.9) throw new Error("Oracle Core connection failed: Unstable rift detected.");
     return mockSignals;
 }
 
 export async function getThreats(): Promise<Threat[]> {
     console.log('[API MOCK] fetching /api/threats');
-    await new Promise(res => setTimeout(res, 600)); // Simulate network delay
+    await new Promise(res => setTimeout(res, 600));
+    if (Math.random() > 0.9) throw new Error("Threat database synchronization failed: Ley lines are crossed.");
     return MOCK_THREATS;
 }

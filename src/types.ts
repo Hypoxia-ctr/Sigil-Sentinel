@@ -12,6 +12,7 @@ export enum View {
   DATA_LOSS_PREVENTION = 'DATA_LOSS_PREVENTION',
   AUDIT_QUEUE = 'AUDIT_QUEUE',
   SYSTEM_LOG = 'SYSTEM_LOG',
+  LIVE_CONVERSATION = 'LIVE_CONVERSATION',
 }
 
 // ----- Shared Security Types -----

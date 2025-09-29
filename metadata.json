@@ -1,5 +1,7 @@
 {
   "name": "Copy of Sigil Sentinel: Arcane Dashboard",
   "description": "A security dashboard with a dark, arcane, and mystical user interface for monitoring system integrity, viewing threats, and managing daemons using the power of Gemini.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "microphone"
+  ]
 }

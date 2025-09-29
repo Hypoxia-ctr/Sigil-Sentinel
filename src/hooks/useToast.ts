@@ -35,8 +35,6 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setToasts(prevToasts => prevToasts.filter(toast => toast.id !== id));
   }, []);
 
-  // FIX: Rewritten with React.createElement to be valid in a .ts file.
-  // The original JSX syntax caused parsing errors because this file does not have a .tsx extension.
   return React.createElement(
     ToastContext.Provider,
     { value: { toasts, addToast, removeToast } },

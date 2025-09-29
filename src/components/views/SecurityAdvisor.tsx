@@ -162,7 +162,7 @@ const FixActionItem: React.FC<FixActionItemProps> = ({
             {fx.tags?.map(t => (<span key={t} className="px-2 py-0.5 rounded-full border border-zinc-700 text-xs text-zinc-400">#{t}</span>))}
           </div>
         </div>
-        <div className="shrink-0 flex flex-col items-end gap-2 self-start sm:self-center">
+        <div className="shrink-0 flex flex-col sm:flex-row items-end gap-2 self-start sm:self-center">
            <button onClick={() => onGetAIInsight(fx)} onMouseEnter={playHover} disabled={oracleInsight?.loading} className={`btn text-sm ${oracleInsight?.loading ? "opacity-50 cursor-wait" : "text-fuchsia-300"}`}>
               <GeminiIcon className={`h-4 w-4 ${oracleInsight?.loading ? 'animate-spin' : ''}`} /> {oracleButtonText}
            </button>
@@ -196,7 +196,7 @@ const FixActionItem: React.FC<FixActionItemProps> = ({
                 <div 
                     ref={insightRef} 
                     tabIndex={-1} 
-                    className="text-zinc-300 max-w-none focus:outline-none focus:ring-1 focus:ring-fuchsia-500 rounded"
+                    className="text-zinc-300 max-w-none focus:outline-none focus:ring-1 focus:ring-fuchsia-500 rounded bg-black/20 p-4 border border-fuchsia-500/20"
                 >
                     <pre className="whitespace-pre-wrap font-serif text-sm">
                         {oracleInsight.text}

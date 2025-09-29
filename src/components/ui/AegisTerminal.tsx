@@ -88,7 +88,6 @@ export default function AegisTerminal({
       const text = typeof r === "string" ? r : r == null ? "" : String(r);
       setOutputs((o) => [...o, { cmd, output: text, time: Date.now() }]);
       playConfirm();
-    // FIX: Renamed catch block variable from `err` to `error` to avoid "Cannot find name" error.
     } catch (error: any) {
       setOutputs((o) => [...o, { cmd, output: `Error: ${error?.message ?? String(error)}`, time: Date.now() }]);
     } finally {

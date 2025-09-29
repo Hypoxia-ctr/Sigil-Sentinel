@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Signal, AIInsightState, AuditQueueItem, Threat } from '../types';
+import { View, Signal, FixAction, AIInsightState, AuditQueueItem, Threat } from '../types';
 import Dashboard from './views/Dashboard';
 import FileAnalyzer from './views/FileAnalyzer';
 import SystemMonitor from './views/SystemMonitor';
@@ -13,6 +13,7 @@ import AdminConsole from './views/AdminConsole';
 import DataLossPrevention from './views/DataLossPrevention';
 import AuditQueueView from './views/AuditQueueView';
 import SystemLog from './views/SystemLog';
+import LiveConversation from './views/LiveConversation';
 import { CommandPalette, Command } from './ui/CommandPalette';
 import { NAVIGATION_ITEMS } from '../lib/constants';
 import SigilLibrary from './ui/SigilLibrary';
@@ -26,8 +27,21 @@ import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import { getSignals, getThreats } from '../lib/api';
 import { useEvents } from '../hooks/useEvents';
+import { ThemeProvider } from './ThemeProvider';
 
 const ORACLE_CACHE_KEY = 'sigil-sentinel-oracle-cache';
+
+const ErrorOverlay: React.FC<{ message: string; onRetry: () => void }> = ({ message, onRetry }) => (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+        <div className="card hx-glow-border p-8 text-center" style={{ '--glow-color': 'var(--red)' } as React.CSSProperties}>
+            <h2 className="text-2xl font-bold text-red-400">Connection Error</h2>
+            <p className="mt-2 text-gray-300 max-w-md">{message}</p>
+            <button onClick={onRetry} className="btn primary mt-6">
+                Retry Connection
+            </button>
+        </div>
+    </div>
+);
 
 const AppContent: React.FC = () => {
   const [view, setView] = useState<View>(() => (localStorage.getItem('sigil-active-view') as View) || View.DASHBOARD);
@@ -52,6 +66,24 @@ const AppContent: React.FC = () => {
   
   usePreserveScroll("sigil:scroll:main", "main-content", { debounceMs: 140 });
 
+  const fetchData = useCallback(async () => {
+    try {
+        setIsLoading(true);
+        setError(null);
+        const [signalsData, threatsData] = await Promise.all([
+            getSignals(),
+            getThreats()
+        ]);
+        setSignals(signalsData);
+        setThreats(threatsData);
+    } catch (err: any) {
+        console.error("Failed to fetch initial data", err);
+        setError(err.message || "Failed to connect to the Sigil Sentinel core. Please check your connection and refresh.");
+    } finally {
+        setIsLoading(false);
+    }
+  }, []);
+
   useEffect(() => localStorage.setItem('sigil-active-view', view), [view]);
   useEffect(() => localStorage.setItem(ORACLE_CACHE_KEY, JSON.stringify(oracleCache)), [oracleCache]);
   useEffect(() => {
@@ -60,26 +92,8 @@ const AppContent: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const fetchData = async () => {
-        try {
-            setIsLoading(true);
-            setError(null);
-            const [signalsData, threatsData] = await Promise.all([
-                getSignals(),
-                getThreats()
-            ]);
-            setSignals(signalsData);
-            setThreats(threatsData);
-        } catch (err) {
-            console.error("Failed to fetch initial data", err);
-            setError("Failed to connect to the Sigil Sentinel core. Please check your connection and refresh.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
     fetchData();
-  }, []);
+  }, [fetchData]);
 
   const handleSelectSigil = (name: SigilName) => {
     setActiveSigil(name);
@@ -147,12 +161,10 @@ const AppContent: React.FC = () => {
     if (isLoading) {
         return <div className="p-8 text-center text-cyan-300">Connecting to the Oracle Core...</div>;
     }
-    if (error) {
-        return <div className="p-8 text-center text-red-400">{error}</div>;
-    }
 
     switch (view) {
       case View.DASHBOARD: return <Dashboard onChangeView={setView} events={events} isConnected={isConnected} />;
+      case View.LIVE_CONVERSATION: return <LiveConversation />;
       case View.FILE_ANALYZER: return <FileAnalyzer onChangeView={setView} />;
       case View.SYSTEM_MONITOR: return <SystemMonitor />;
       case View.SYSTEM_LOG: return <SystemLog />;
@@ -179,12 +191,13 @@ const AppContent: React.FC = () => {
           activeSigilName={activeSigil}
         />
         <div className="flex-1 flex flex-col overflow-hidden">
-           <Topbar title={currentViewTitle} onOpenCommandPalette={() => setCommandPaletteOpen(true)} />
+           <Topbar title={currentViewTitle} onOpenCommandPalette={() => setCommandPaletteOpen(true)} onChangeView={setView} setView={setView} />
            <div id="main-content" className="main-content flex-1">
               {renderView()}
            </div>
         </div>
       </div>
+      {error && <ErrorOverlay message={error} onRetry={fetchData} />}
       <CommandPalette isOpen={isCommandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} commands={commands} />
       <SigilLibrary isOpen={isSigilLibraryOpen} onClose={() => setSigilLibraryOpen(false)} onSelectSigil={handleSelectSigil} currentSigil={activeSigil} />
       <QueueFixPrompt isOpen={isQueuePromptOpen} onClose={() => setQueuePromptOpen(false)} onQueue={handleQueueFix} threats={threats} />
@@ -194,9 +207,11 @@ const AppContent: React.FC = () => {
 };
 
 const App: React.FC = () => (
-  <ToastProvider>
-    <AppContent />
-  </ToastProvider>
+  <ThemeProvider>
+    <ToastProvider>
+      <AppContent />
+    </ToastProvider>
+  </ThemeProvider>
 );
 
 export default App;

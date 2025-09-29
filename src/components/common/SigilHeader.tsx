@@ -21,7 +21,6 @@ const SigilElderTechComponent: React.FC<React.SVGProps<SVGSVGElement>> = (props)
 
 export default function SigilHeader(){
   return (
-    // FIX: Casted style object to React.CSSProperties to allow for CSS custom properties.
     <div className="bg-grid group relative overflow-hidden p-6 md:p-10 hx-glow-border" style={{ '--glow-color': 'var(--mag)' } as React.CSSProperties}>
       <div className="absolute -top-12 -right-8 opacity-60 rotate-12 w-56 md:w-72 glow-mag animate-rotate-very-slow animate-sigil-glow-mag transition-transform duration-300 group-hover:scale-115">
         <SigilElderTechComponent/>

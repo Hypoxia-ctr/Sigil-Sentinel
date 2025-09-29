@@ -161,7 +161,6 @@ const FileAnalyzer: React.FC<FileAnalyzerProps> = ({ onChangeView }) => {
                 entropy: 0,
                 reason: 'Error during analysis. The file may be corrupted or unreadable.',
                 strings: [],
-                // FIX: Added missing 'type' property to satisfy the AnalysisResult['signatures'] type.
                 signatures: [{ name: 'Analysis.Error.CorruptFile', type: 'Suspicious'}],
             });
         } finally {

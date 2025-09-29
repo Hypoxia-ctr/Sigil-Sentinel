@@ -87,9 +87,13 @@ interface ThreatScannerProps {
   onRequestFix: (threat: Threat) => void;
 }
 
-const FILTERS_STORAGE_KEY = 'ui:filters';
+const FILTERS_STORAGE_KEY = 'sigil-scanner-filters';
 type SortKey = 'score' | 'date';
 type SortDirection = 'asc' | 'desc';
+
+const SortIcon: React.FC<{ direction: SortDirection }> = ({ direction }) => (
+    <span className="inline-block w-4 h-4 ml-1">{direction === 'desc' ? '↓' : '↑'}</span>
+);
 
 function useDebounced<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
@@ -262,11 +266,11 @@ const ThreatScanner: React.FC<ThreatScannerProps> = ({ threats: initialThreats, 
         </div>
          <div className="flex items-center gap-2">
             <span className="text-sm text-gray-400">Sort by:</span>
-            <button onClick={() => handleSort('score')} className={`pill text-xs ${sortConfig.key === 'score' ? 'pill-active' : ''}`}>
-                Score {sortConfig.key === 'score' && (sortConfig.direction === 'desc' ? '↓' : '↑')}
+            <button onClick={() => handleSort('score')} className={`pill text-xs flex items-center ${sortConfig.key === 'score' ? 'pill-active' : ''}`}>
+                Score {sortConfig.key === 'score' && <SortIcon direction={sortConfig.direction} />}
             </button>
-            <button onClick={() => handleSort('date')} className={`pill text-xs ${sortConfig.key === 'date' ? 'pill-active' : ''}`}>
-                Date {sortConfig.key === 'date' && (sortConfig.direction === 'desc' ? '↓' : '↑')}
+            <button onClick={() => handleSort('date')} className={`pill text-xs flex items-center ${sortConfig.key === 'date' ? 'pill-active' : ''}`}>
+                Date {sortConfig.key === 'date' && <SortIcon direction={sortConfig.direction} />}
             </button>
         </div>
       </header>

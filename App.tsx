@@ -24,6 +24,7 @@ import { ToastContainer } from './components/Toast';
 import { loadAuditQueue, addToAuditQueue, removeFromAuditQueue, clearAuditQueue } from './lib/storage';
 import QueueFixPrompt from './components/QueueFixPrompt';
 import { ThemeProvider } from './components/ThemeProvider';
+import LiveConversation from './components/views/LiveConversation';
 
 const mockSignals: Signal[] = [
   { key: 'firewall.enabled', label: 'Firewall Status', category: 'Network', value: false, at: new Date().toISOString() },
@@ -215,6 +216,7 @@ const AppContent: React.FC = () => {
   const renderView = () => {
     switch (view) {
       case View.DASHBOARD: return <Dashboard onChangeView={setView} />;
+      case View.LIVE_CONVERSATION: return <LiveConversation />;
       case View.FILE_ANALYZER: return <FileAnalyzer onChangeView={setView} />;
       case View.SYSTEM_MONITOR: return <SystemMonitor />;
       case View.SECURITY_ADVISOR: return <SecurityAdvisor signals={mockSignals} onRequestFix={handleQueueFix} oracleCache={oracleCache} setOracleCache={setOracleCache} onClearOracleCache={handleClearOracleCache} />;

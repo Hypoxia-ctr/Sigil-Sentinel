@@ -2,8 +2,6 @@ import React, { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
 
 // Define types for our graph data
-// FIX: Explicitly add properties from d3.SimulationNodeDatum to resolve type errors
-// where the compiler fails to recognize them on the extended interface.
 interface Node extends d3.SimulationNodeDatum {
     id: string;
     group: string;
@@ -132,9 +130,6 @@ const NetworkMap: React.FC = () => {
             .style("pointer-events", "none");
 
         simulation.on('tick', () => {
-            // FIX: Explicitly cast the datum `d` to the correct types (`Link` and `Node`)
-            // to resolve type errors where `d` was inferred as `unknown`.
-            // The simulation ensures that `source` and `target` are `Node` objects with `x` and `y` properties.
             linkGroup.selectAll("line")
                 .attr('x1', (d) => ((d as Link).source as Node).x!)
                 .attr('y1', (d) => ((d as Link).source as Node).y!)
