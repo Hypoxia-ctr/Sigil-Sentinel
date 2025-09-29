@@ -20,7 +20,7 @@ const ThreatHistoryChart: React.FC<ThreatHistoryChartProps> = ({ history }) => {
   const padding = { top: 20, right: 20, bottom: 40, left: 40 };
 
   const maxTotal = Math.max(...history.map(day => 
-    Object.values(day.counts).reduce((sum, count) => sum + count, 0)
+    Object.values(day.counts).reduce((sum: number, count: number) => sum + count, 0)
   ), 1);
 
   const xScale = (index: number) => padding.left + (index * (width - padding.left - padding.right)) / history.length;
@@ -45,7 +45,7 @@ const ThreatHistoryChart: React.FC<ThreatHistoryChartProps> = ({ history }) => {
         {/* Bars */}
         {history.map((day, index) => {
           let currentY = 0;
-          const totalForDay = SEVERITY_ORDER.reduce((sum, sev) => sum + day.counts[sev], 0);
+          const totalForDay = SEVERITY_ORDER.reduce((sum: number, sev: Severity) => sum + day.counts[sev], 0);
 
           return (
             <g key={day.date} transform={`translate(${xScale(index)}, 0)`}>

@@ -34,11 +34,41 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose,
   const filteredCommands = useMemo(() => {
     if (!searchTerm) return commands;
     const lowerCaseSearch = searchTerm.toLowerCase();
-    return commands.filter(cmd => 
-      cmd.title.toLowerCase().includes(lowerCaseSearch) ||
-      cmd.category.toLowerCase().includes(lowerCaseSearch) ||
-      (cmd.keywords && cmd.keywords.join(' ').toLowerCase().includes(lowerCaseSearch))
-    );
+
+    const getScore = (cmd: Command) => {
+      const title = cmd.title.toLowerCase();
+      const category = cmd.category.toLowerCase();
+      const keywords = (cmd.keywords || []).join(' ').toLowerCase();
+      let score = 0;
+
+      // Prioritize exact matches
+      if (title === lowerCaseSearch) return 100;
+
+      // Prioritize matches at the start of the title
+      if (title.startsWith(lowerCaseSearch)) {
+        score += 50;
+      } else if (title.includes(lowerCaseSearch)) {
+        score += 20;
+      }
+
+      if (keywords.includes(lowerCaseSearch)) {
+        score += 10;
+      }
+      
+      if (category.toLowerCase().startsWith(lowerCaseSearch)) {
+          score += 5;
+      } else if (category.includes(lowerCaseSearch)) {
+          score += 2;
+      }
+
+      return score;
+    };
+    
+    return commands
+      .map(cmd => ({ ...cmd, score: getScore(cmd) }))
+      .filter(cmd => cmd.score > 0)
+      .sort((a, b) => b.score - a.score);
+      
   }, [searchTerm, commands]);
 
   // Reset search and active index when palette is opened/closed
@@ -55,13 +85,16 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose,
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isOpen) return;
+      
+      const commandsLength = filteredCommands.length;
+      if (commandsLength === 0) return;
 
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setActiveIndex(prev => (prev + 1) % filteredCommands.length);
+        setActiveIndex(prev => (prev + 1) % commandsLength);
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setActiveIndex(prev => (prev - 1 + filteredCommands.length) % filteredCommands.length);
+        setActiveIndex(prev => (prev - 1 + commandsLength) % commandsLength);
       } else if (e.key === 'Enter') {
         e.preventDefault();
         if (filteredCommands[activeIndex]) {

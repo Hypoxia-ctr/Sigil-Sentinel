@@ -43,6 +43,39 @@ function severityColorClass(sev: Severity) {
   }
 }
 
+const SEVERITY_SCORE: Record<Severity, number> = {
+  critical: 95,
+  high: 80,
+  medium: 55,
+  low: 20,
+};
+
+const getThreatScore = (threat: Threat, isExplained: boolean): number => {
+  let score = SEVERITY_SCORE[threat.severity];
+  // Unexplained critical/high threats are more urgent and get a score boost
+  if (!isExplained && (threat.severity === 'critical' || threat.severity === 'high')) {
+      score += 5;
+  }
+  return Math.min(100, score);
+};
+
+const ThreatScore: React.FC<{ score: number }> = ({ score }) => {
+    const colorClass = score >= 90 ? 'text-red' : score >= 75 ? 'text-mag' : score >= 50 ? 'text-amber' : 'text-lime';
+    const shadowColor = score >= 90 ? 'var(--red)' : score >= 75 ? 'var(--mag)' : score >= 50 ? 'var(--amber)' : 'var(--lime)';
+    return (
+        <div className="flex-shrink-0 flex flex-col items-center justify-center w-16 text-center">
+            <div 
+                className={`text-3xl font-bold font-mono ${colorClass}`}
+                style={{ textShadow: `0 0 10px ${shadowColor}` }}
+            >
+                {score}
+            </div>
+            <div className="text-xs text-gray-500 uppercase tracking-widest">Score</div>
+        </div>
+    );
+};
+
+
 interface ThreatScannerProps {
   threats: Threat[];
   onChangeView: (view: View) => void;
@@ -196,11 +229,14 @@ const ThreatScanner: React.FC<ThreatScannerProps> = ({ threats: initialThreats, 
       <p className="text-sm text-gray-500 mt-4">{visible.length} of {threats.length} threats shown.</p>
       
       <ul className="threat-list flex flex-col gap-3 mt-4">
-        {visible.map(t => (
+        {visible.map(t => {
+          const isExplained = !!oracleCache[t.id]?.text || !!t.explained;
+          const threatScore = getThreatScore(t, isExplained);
+          return (
             <li key={t.id} className={`threat-card card-widget card-ornamented ${expanded[t.id] ? 'bg-zinc-800/50' : ''}`} role="listitem">
-                <header className="flex w-full items-start justify-between gap-3 cursor-pointer" onClick={() => { playClick(); setExpanded(e => ({...e, [t.id]: !e[t.id]})); }}>
-                    <div className="flex items-center gap-3">
-                        <SeveritySigil severity={t.severity} />
+                <header className="flex w-full items-center justify-between gap-3 cursor-pointer" onClick={() => { playClick(); setExpanded(e => ({...e, [t.id]: !e[t.id]})); }}>
+                    <div className="flex items-center gap-4">
+                        <ThreatScore score={threatScore} />
                         <div className="min-w-0">
                             <h3 className="text-base font-semibold text-gray-100 truncate">{t.title}</h3>
                             <p className="text-sm text-gray-400 truncate">{t.reason}</p>
@@ -208,9 +244,10 @@ const ThreatScanner: React.FC<ThreatScannerProps> = ({ threats: initialThreats, 
                     </div>
                     <div className="flex-shrink-0 flex items-center gap-4 ml-auto pl-4">
                         <div className={`severity-badge ${severityColorClass(t.severity)}`}>
-                            {severityLabel(t.severity)}
+                            <SeveritySigil severity={t.severity} className="w-4 h-4" />
+                            <span>{severityLabel(t.severity)}</span>
                         </div>
-                        <span className="text-sm text-gray-500">{new Date(t.detectedAt || 0).toLocaleTimeString()}</span>
+                        <span className="text-sm text-gray-500 font-mono">{new Date(t.detectedAt || 0).toLocaleTimeString()}</span>
                     </div>
                 </header>
                 {expanded[t.id] && (
@@ -234,7 +271,8 @@ const ThreatScanner: React.FC<ThreatScannerProps> = ({ threats: initialThreats, 
                     </div>
                 )}
             </li>
-        ))}
+          );
+        })}
       </ul>
     </main>
   );

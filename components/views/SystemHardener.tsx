@@ -63,18 +63,21 @@ const DEFAULT_WARDS: Ward[] = [
 ];
 
 
-const STORAGE_KEY = "sigil-hardener-order";
+const STORAGE_KEY = "sigil-hardener-wards-config";
 
 export default function SystemHardener() {
   const [wards, setWards] = useState<Ward[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
-        const ids: string[] = JSON.parse(saved);
-        const map = new Map(DEFAULT_WARDS.map(w => [w.id, w]));
-        const ordered = ids.map(id => map.get(id)!).filter(Boolean);
-        const newWards = DEFAULT_WARDS.filter(d => !ids.includes(d.id));
-        return [...ordered, ...newWards];
+        // Use saved config, but reconcile with defaults to get latest titles, descriptions, etc.
+        const savedWards = JSON.parse(saved) as Ward[];
+        const savedMap = new Map(savedWards.map(w => [w.id, w]));
+        return DEFAULT_WARDS.map(defaultWard => 
+            savedMap.has(defaultWard.id) 
+            ? { ...defaultWard, applied: savedMap.get(defaultWard.id)!.applied } 
+            : defaultWard
+        );
       }
     } catch {}
     return DEFAULT_WARDS.slice();
@@ -87,10 +90,9 @@ export default function SystemHardener() {
   const { addToast } = useToast();
 
   const prevRef = useRef<Ward[] | null>(null);
-  const [lastAppliedAt, setLastAppliedAt] = useState<number | null>(null);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(wards.map(w => w.id)));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(wards));
   }, [wards]);
 
   const dragIndexRef = useRef<number | null>(null);
@@ -113,31 +115,53 @@ export default function SystemHardener() {
     dragIndexRef.current = null;
     setWards(next);
   }
-
-  async function applyProfile() {
+  
+  const handleToggleWard = (wardId: string) => {
     playClick();
+    prevRef.current = JSON.parse(JSON.stringify(wards));
+    const updatedWards = wards.map(w =>
+      w.id === wardId ? { ...w, applied: !w.applied } : w
+    );
+    const changedWard = updatedWards.find(w => w.id === wardId);
+    setWards(updatedWards);
+    addToast({
+      title: 'Ward Configuration Updated',
+      message: `Ward "${changedWard?.title}" is now ${changedWard?.applied ? 'enabled' : 'disabled'}.`,
+      type: 'info'
+    });
+  };
+
+  async function handleApplyEnabledWards() {
+    playClick();
+    
+    const wardsToApply = wards.filter(w => w.applied);
+    if (wardsToApply.length === 0) {
+      addToast({ title: 'No Wards to Apply', message: 'There are no enabled wards in the profile.', type: 'warning' });
+      return;
+    }
+    
     setIsApplying(true);
     setApplyProgress(0);
-    prevRef.current = JSON.parse(JSON.stringify(wards));
-    setWards(w => w.map(x => ({ ...x, applied: false })));
-    for (let i=0; i < wards.length; i++){
+    
+    for (let i = 0; i < wardsToApply.length; i++) {
       await new Promise(r => setTimeout(r, 400));
-      setWards(current => current.map((cw,ci) => ci <= i ? {...cw, applied: true} : cw));
-      setApplyProgress(((i + 1) / wards.length) * 100);
+      setApplyProgress(((i + 1) / wardsToApply.length) * 100);
     }
-    setLastAppliedAt(Date.now());
+    
     playConfirm();
     setIsApplying(false);
-    addToast({ title: 'Profile Applied', message: 'All wards have been applied in the specified order.', type: 'success' });
+    addToast({ title: 'Profile Applied', message: `${wardsToApply.length} enabled wards have been applied.`, type: 'success' });
   }
 
-  function undoApply() {
+  function handleUndo() {
     playClick();
-    if (!prevRef.current) return;
+    if (!prevRef.current) {
+        addToast({ title: 'Nothing to Undo', message: 'There is no previous action to revert.', type: 'warning' });
+        return;
+    }
     setWards(prevRef.current);
     prevRef.current = null;
-    setLastAppliedAt(null);
-    addToast({ title: 'Undo Successful', message: 'The last "Apply Profile" action has been reverted.', type: 'info' });
+    addToast({ title: 'Undo Successful', message: 'The last change has been reverted.', type: 'info' });
   }
 
   const copyToClipboard = (text: string) => {
@@ -154,10 +178,10 @@ export default function SystemHardener() {
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">System Hardener — Wards</h2>
         <div className="flex gap-2">
-          <button onClick={applyProfile} onMouseEnter={playHover} className="btn primary" disabled={isApplying}>
-            {isApplying ? 'Applying...' : 'Apply in Order'}
+          <button onClick={handleApplyEnabledWards} onMouseEnter={playHover} className="btn primary" disabled={isApplying}>
+            {isApplying ? 'Applying...' : 'Apply Enabled Wards'}
           </button>
-          <button onClick={undoApply} onMouseEnter={playHover} className="btn" disabled={!prevRef.current || isApplying}>Undo Last Apply</button>
+          <button onClick={handleUndo} onMouseEnter={playHover} className="btn" disabled={!prevRef.current || isApplying}>Undo Last Change</button>
         </div>
       </div>
       
@@ -167,7 +191,7 @@ export default function SystemHardener() {
          </div>
        )}
 
-      <p className="text-sm text-zinc-400">Drag the wards to reorder their priority. Your custom order is saved to this browser and will persist across sessions.</p>
+      <p className="text-sm text-zinc-400">Drag the wards to reorder their priority. Enable the desired wards and then apply them. Your configuration is saved automatically.</p>
 
       <ul className="space-y-2">
         {wards.map((w, idx) => (
@@ -177,7 +201,7 @@ export default function SystemHardener() {
             onDragStart={(e) => onDragStart(e, idx)}
             onDragOver={(e) => onDragOver(e, idx)}
             onDrop={(e) => onDrop(e, idx)}
-            className={`p-3 flex items-start gap-3 transition-all hx-glow-border ${isApplying ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'}`}
+            className={`p-3 flex items-start gap-3 transition-all hx-glow-border ${isApplying ? 'cursor-not-allowed opacity-60' : 'cursor-grab active:cursor-grabbing'}`}
             aria-grabbed={undefined}
           >
             <div className="w-8 h-8 shrink-0 flex items-center justify-center rounded border border-zinc-700">
@@ -187,39 +211,24 @@ export default function SystemHardener() {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-zinc-100 truncate">{w.title}</h3>
-                {w.applied && <span className="text-xs text-emerald-400">Applied</span>}
-                {!w.applied && lastAppliedAt && <span className="text-xs text-amber-300">Pending</span>}
               </div>
               <p className="mt-1 text-sm text-zinc-400">{w.description}</p>
-              <div className="mt-2 flex gap-2 items-center">
-                <button
-                  onMouseEnter={playHover}
-                  onClick={() => {
-                    playClick();
-                    prevRef.current = JSON.parse(JSON.stringify(wards));
-                    setWards(cur => cur.map(c => c.id === w.id ? { ...c, applied: true } : c));
-                    setLastAppliedAt(Date.now());
-                    addToast({ title: "Ward Status Updated", message: `Ward "${w.title}" is now marked as applied.`, type: "success" });
-                  }}
-                  className="btn text-sm"
-                  disabled={isApplying}
-                >
-                  Apply Ward
-                </button>
-                <button
-                  onMouseEnter={playHover}
-                  onClick={() => {
-                    playClick();
-                    prevRef.current = JSON.parse(JSON.stringify(wards));
-                    setWards(cur => cur.map(c => c.id === w.id ? { ...c, applied: false } : c));
-                    addToast({ title: "Ward Status Updated", message: `Ward "${w.title}" is now marked as not applied.`, type: "info" });
-                  }}
-                  className="btn text-sm"
-                  aria-label={`Revert ward ${w.title}`}
-                  disabled={isApplying}
-                >
-                  Revert
-                </button>
+              <div className="mt-2 flex gap-4 items-center">
+                 <label className="flex items-center gap-2 cursor-pointer" onMouseEnter={playHover}>
+                    <div className="toggle-switch">
+                        <input 
+                            type="checkbox" 
+                            checked={w.applied || false} 
+                            onChange={() => handleToggleWard(w.id)}
+                            disabled={isApplying}
+                            aria-labelledby={`ward-title-${w.id}`}
+                        />
+                        <span className="toggle-slider"></span>
+                    </div>
+                    <span id={`ward-title-${w.id}`} className={`text-sm font-semibold ${w.applied ? 'text-ok' : 'text-zinc-400'}`}>
+                        {w.applied ? 'Enabled' : 'Disabled'}
+                    </span>
+                </label>
                  <button
                   onMouseEnter={playHover}
                   onClick={() => { playClick(); setExpandedWard(expandedWard === w.id ? null : w.id); }}

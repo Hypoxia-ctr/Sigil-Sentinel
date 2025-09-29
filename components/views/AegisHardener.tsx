@@ -47,7 +47,9 @@ const AegisGauge: React.FC<{ label: string; value: number; icon: ReactNode; colo
     );
 };
 
-const StatusListItem: React.FC<{ label: string; status: 'Hardened' | 'Active' | 'Inactive' }> = ({ label, status }) => {
+type ServiceStatus = 'Hardened' | 'Active' | 'Inactive';
+
+const StatusListItem: React.FC<{ label: string; status: ServiceStatus }> = ({ label, status }) => {
     const statusStyles = {
         Hardened: { text: 'text-green-400', bg: 'bg-green-500', dot: 'shadow-[0_0_8px_theme(colors.green.500)]' },
         Active: { text: 'text-yellow-400', bg: 'bg-yellow-500', dot: 'shadow-[0_0_8px_theme(colors.yellow.500)]' },
@@ -55,7 +57,7 @@ const StatusListItem: React.FC<{ label: string; status: 'Hardened' | 'Active' | 
     };
     const styles = statusStyles[status];
     return (
-        <div className="flex items-center justify-between py-2 px-3 bg-black/20 rounded-md">
+        <div key={status} className="flex items-center justify-between py-2 px-3 bg-black/20 rounded-md animate-status-pop-in">
             <span className="text-gray-300">{label}</span>
             <div className="flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full animate-pulse ${styles.bg} ${styles.dot}`}></div>
@@ -92,19 +94,45 @@ const initialOutput = [{
     time: Date.now()
 }];
 
+const initialServiceStatuses: Record<string, ServiceStatus> = {
+    'nftables': 'Hardened',
+    'sshd': 'Hardened',
+    'fail2ban': 'Active',
+    'auditd': 'Active',
+    'Aegis Agent': 'Hardened',
+    'ssh/99-hardening.conf': 'Hardened',
+    'sysctl/90-hardening.conf': 'Hardened',
+    'aegis/policy.yaml': 'Active',
+};
 
 const AegisHardener: React.FC = () => {
     const [scores, setScores] = useState({ firewall: 98, kernel: 92, ml: 75, overall: 88 });
+    const [serviceStatuses, setServiceStatuses] = useState<Record<string, ServiceStatus>>(initialServiceStatuses);
 
     useEffect(() => {
-        const interval = setInterval(() => {
+        const scoreInterval = setInterval(() => {
             setScores(prev => ({
                 ...prev,
                 ml: Math.min(100, prev.ml + 0.1),
                 overall: Math.round((prev.firewall + prev.kernel + Math.min(100, prev.ml + 0.1)) / 3)
             }));
         }, 1000);
-        return () => clearInterval(interval);
+
+        const statusInterval = setInterval(() => {
+            setServiceStatuses(prevStatuses => {
+                const services = Object.keys(prevStatuses);
+                const randomService = services[Math.floor(Math.random() * services.length)];
+                const possibleStatuses: ServiceStatus[] = ['Hardened', 'Active', 'Inactive'];
+                const currentStatus = prevStatuses[randomService];
+                const newStatus = possibleStatuses.filter(s => s !== currentStatus)[Math.floor(Math.random() * 2)];
+                return { ...prevStatuses, [randomService]: newStatus };
+            });
+        }, 4000);
+
+        return () => {
+            clearInterval(scoreInterval);
+            clearInterval(statusInterval);
+        };
     }, []);
 
     return (
@@ -125,17 +153,21 @@ const AegisHardener: React.FC = () => {
                      <div className="p-4 bg-black/30 rounded-lg border border-yellow-500/10 h-full">
                         <h2 className="text-lg font-semibold text-yellow-300 mb-3 border-b border-yellow-500/10 pb-2">Active Services</h2>
                         <div className="space-y-2">
-                            <StatusListItem label="nftables" status="Hardened" />
-                            <StatusListItem label="sshd" status="Hardened" />
-                            <StatusListItem label="fail2ban" status="Active" />
-                            <StatusListItem label="auditd" status="Active" />
-                             <StatusListItem label="Aegis Agent" status="Hardened" />
+                            {Object.entries(serviceStatuses)
+                                .slice(0, 5)
+                                .map(([name, status]) => (
+                                    <StatusListItem key={name} label={name} status={status} />
+                                ))
+                            }
                         </div>
                          <h2 className="text-lg font-semibold text-yellow-300 mb-3 border-b border-yellow-500/10 pb-2 mt-6">Configuration</h2>
                           <div className="space-y-2">
-                            <StatusListItem label="ssh/99-hardening.conf" status="Hardened" />
-                            <StatusListItem label="sysctl/90-hardening.conf" status="Hardened" />
-                            <StatusListItem label="aegis/policy.yaml" status="Active" />
+                            {Object.entries(serviceStatuses)
+                                .slice(5)
+                                .map(([name, status]) => (
+                                    <StatusListItem key={name} label={name} status={status} />
+                                ))
+                            }
                         </div>
                     </div>
                 </div>
