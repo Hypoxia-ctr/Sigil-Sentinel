@@ -179,10 +179,18 @@
         50% { box-shadow: 0 0 .9rem var(--glow-color, var(--cyan)), inset 0 0 .25rem rgba(255,255,255,.06); }
       }
       @keyframes pop-in {
-        from { opacity: 0; transform: scale(0.9); }
-        to { opacity: 1; transform: scale(1); }
+        from {
+          opacity: 0;
+          transform: scale(0.9);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
       }
-      .animate-status-pop-in { animation: pop-in 0.4s ease-out forwards; }
+      .animate-status-pop-in {
+        animation: pop-in 0.4s ease-out forwards;
+      }
 
 
       /* --- Command Palette --- */
@@ -196,14 +204,17 @@
       .command-palette-item:hover, .command-palette-item.active { background-color: var(--command-palette-active-bg); }
       
       /* --- Sigil Library & Theme Selector --- */
-      .sigil-library__theme-selector { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 1rem; }
-      .theme-card { padding: 1rem; border: 1px solid var(--border-color); border-radius: 8px; text-align: center; cursor: pointer; transition: all 0.2s; color: var(--text-color); }
-      .theme-card:hover { border-color: var(--border-color-hover); background-color: var(--panel-900); }
-      .theme-card.active { border-color: var(--cyan); box-shadow: 0 0 10px var(--cyan); }
-      .theme-preview { display: flex; justify-content: center; gap: 4px; height: 32px; margin-bottom: 0.75rem; border-radius: 4px; overflow: hidden; border: 1px solid var(--border-color); }
-      .theme-preview--dark { background-color: #05070b; } .theme-preview--dark span:nth-child(1) { background-color: #44f1ff; } .theme-preview--dark span:nth-child(2) { background-color: #ff3bf2; } .theme-preview--dark span:nth-child(3) { background-color: #9bff6b; } .theme-preview--dark span:nth-child(4) { background-color: #ffc043; }
-      .theme-preview--light { background-color: #f1f5f9; } .theme-preview--light span:nth-child(1) { background-color: #0891b2; } .theme-preview--light span:nth-child(2) { background-color: #c026d3; } .theme-preview--light span:nth-child(3) { background-color: #16a34a; } .theme-preview--light span:nth-child(4) { background-color: #d97706; }
-      .theme-preview--arcane { background-color: #1a1b26; } .theme-preview--arcane span:nth-child(1) { background-color: #7dcfff; } .theme-preview--arcane span:nth-child(2) { background-color: #bb9af7; } .theme-preview--arcane span:nth-child(3) { background-color: #9ece6a; } .theme-preview--arcane span:nth-child(4) { background-color: #e0af68; }
+      .sigil-library-backdrop { position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.7); backdrop-filter: blur(4px); z-index: 50; display: flex; justify-content: center; align-items: center; }
+      .sigil-library { width: 100%; max-width: 768px; padding: 1.5rem; background-color: var(--command-palette-bg); border: 1px solid var(--command-palette-border); border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(74, 222, 255, 0.2); animation: palette-in 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+      .sigil-library__header { text-align: center; margin-bottom: 1.5rem; }
+      .sigil-library__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; }
+      .sigil-library__card { text-align: center; padding: 1rem; border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; transition: all 0.2s; }
+      .sigil-library__card:hover { border-color: var(--border-color-hover); background-color: rgba(255, 255, 255, 0.05); }
+      .sigil-library__card.active { border-color: var(--cyan); box-shadow: 0 0 10px var(--cyan); }
+      .sigil-library__card h4 { font-family: 'Orbitron', sans-serif; margin-top: 0.75rem; color: var(--text-light); }
+      .sigil-library__card p { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem; }
+      .sigil-library__card svg { margin: 0 auto; width: 64px; height: 64px; color: var(--mag); }
+      .sigil-library__card.active svg { color: var(--cyan); }
 
 
       /* --- Global Typography --- */

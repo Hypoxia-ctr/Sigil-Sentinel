@@ -9,7 +9,7 @@ import { explainWithGemini } from "../../lib/api";
 import { defaultAdvicePack } from "../../lib/rules";
 import { Signal, FixAction, AdvicePack, Severity, Category, AIInsightState } from "../../types";
 import { useSound } from "../../hooks/useSound";
-import SeveritySigil from "../SeveritySigil";
+import SeveritySigil from "../common/SeveritySigil";
 import { useToast } from "../../hooks/useToast";
 
 /* ------------------------------------------------------------------
@@ -295,10 +295,8 @@ const SecurityAdvisor: React.FC<SecurityAdvisorProps> = ({
 
     const TTL_MS = 24 * 60 * 60 * 1000;
     if (insight?.text && insight.fetchedAt && (Date.now() - insight.fetchedAt < TTL_MS)) {
-        console.log(`[DevTest] cache hit: true`, {id: fixAction.id});
         return;
     }
-    console.log(`[DevTest] cache miss: true`, {id: fixAction.id});
 
     const storedFeedback = localStorage.getItem(`sigil-feedback-pref:${fixAction.id}`) as 'up' | 'down' | null;
 
@@ -323,7 +321,6 @@ const SecurityAdvisor: React.FC<SecurityAdvisorProps> = ({
         setOracleCache(prev => ({ ...prev, [fixAction.id]: { ...prev[fixAction.id]!, loading: false, text: null, error: result.text, fetchedAt: Date.now() }}));
     } else {
         setOracleCache(prev => ({ ...prev, [fixAction.id]: { ...prev[fixAction.id]!, loading: false, text: result.text, error: null, fetchedAt: Date.now() }}));
-        console.log(`[DevTest] cache write: true`, {id: fixAction.id});
     }
   }, [signals, oracleCache, playConfirm, setOracleCache]);
 

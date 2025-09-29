@@ -75,6 +75,12 @@ const NetworkMap: React.FC = () => {
         
         const svg = d3.select(svgElement);
         svg.selectAll("*").remove(); // Clear previous render
+        
+        // Tooltip setup
+        const tooltip = d3.select(containerElement)
+            .append("div")
+            .attr("class", "d3-tooltip")
+            .style("opacity", 0);
 
         const linkGroup = svg.append("g")
             .selectAll(".link-group")
@@ -96,7 +102,19 @@ const NetworkMap: React.FC = () => {
             .data(nodes)
             .join("g")
             .attr("class", "node network-node")
-            .call(drag(simulation) as any);
+            .call(drag(simulation) as any)
+            .on('mouseover', function(event, d: Node) {
+                d3.select(this).select('circle').transition().duration(200).attr('r', 12);
+                tooltip.transition().duration(200).style('opacity', .95);
+                tooltip.html(`<strong>IP:</strong> ${d.id}<br/><strong>Group:</strong> ${d.group}`)
+                    .style('left', (event.pageX + 15) + 'px')
+                    .style('top', (event.pageY - 28) + 'px');
+            })
+            .on('mouseout', function() {
+                d3.select(this).select('circle').transition().duration(200).attr('r', 10);
+                tooltip.transition().duration(500).style('opacity', 0);
+            });
+
 
         nodeGroup.append("circle")
             .attr("r", 10)
@@ -170,11 +188,12 @@ const NetworkMap: React.FC = () => {
             simulation.stop();
             clearInterval(threatInterval);
             resizeObserver.disconnect();
+            d3.select(containerElement).select('.d3-tooltip').remove();
         };
     }, []);
 
     return (
-        <div ref={containerRef} className="w-full h-full" role="img" aria-label="Interactive network map visualization">
+        <div ref={containerRef} className="w-full h-full relative" role="img" aria-label="Interactive network map visualization">
             <svg ref={svgRef} className="w-full h-full"></svg>
         </div>
     );

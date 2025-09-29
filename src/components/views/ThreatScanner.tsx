@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { View, Threat, Severity, AIInsightState } from "../../types";
 import { explainWithGemini } from "../../lib/api";
-import SeveritySigil from "../SeveritySigil";
+import SeveritySigil from "../common/SeveritySigil";
 import { useSound } from "../../hooks/useSound";
 import { useToast } from "../../hooks/useToast";
 
@@ -13,6 +13,9 @@ const ClipboardCopy: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
 );
 const RefreshCcw: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M3 2v6h6"/><path d="M21 12A9 9 0 0 0 6 5.3L3 8"/><path d="M21 22v-6h-6"/><path d="M3 12a9 9 0 0 0 15 6.7l3-2.7"/></svg>
+);
+const GeminiIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M9 7h6m-5 3h4m-3 3h2M4 12a8 8 0 1116 0c0 4.418-3.582 8-8 8s-8-3.582-8-8zm8-10v2m0 16v2m-8-9H2m20 0h-2m-3.9-5.1L4.5 7.5M19.5 7.5l-3.6 3.6" /></svg>
 );
 
 type DetailsTab = 'threat_details' | 'evidence' | 'oracle' | 'raw_details';
@@ -85,6 +88,8 @@ interface ThreatScannerProps {
 }
 
 const FILTERS_STORAGE_KEY = 'ui:filters';
+type SortKey = 'score' | 'date';
+type SortDirection = 'asc' | 'desc';
 
 function useDebounced<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
@@ -117,6 +122,7 @@ const ThreatScanner: React.FC<ThreatScannerProps> = ({ threats: initialThreats, 
     } catch {}
     return { severity: 'all' as "all" | Severity, unexplainedOnly: false, query: '' };
   });
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'score', direction: 'desc' });
   
   const { severity: filterSeverity, unexplainedOnly, query } = filters;
   const debouncedQuery = useDebounced(query, 200);
@@ -129,9 +135,10 @@ const ThreatScanner: React.FC<ThreatScannerProps> = ({ threats: initialThreats, 
   }, [filters]);
 
   const visible = useMemo(() => {
-    return threats.filter(t => {
+    const filtered = threats.filter(t => {
+      const isExplained = !!oracleCache[t.id]?.text || !!t.explained;
       const severityMatch = filterSeverity === "all" || t.severity === filterSeverity;
-      const unexplainedMatch = !unexplainedOnly || !(oracleCache[t.id]?.text || t.explained);
+      const unexplainedMatch = !unexplainedOnly || !isExplained;
       const queryMatch = debouncedQuery.trim() === '' 
         ? true 
         : t.title.toLowerCase().includes(debouncedQuery.toLowerCase()) || 
@@ -140,7 +147,27 @@ const ThreatScanner: React.FC<ThreatScannerProps> = ({ threats: initialThreats, 
           
       return severityMatch && unexplainedMatch && queryMatch;
     });
-  }, [threats, filterSeverity, unexplainedOnly, oracleCache, debouncedQuery]);
+
+    // Sorting logic
+    filtered.sort((a, b) => {
+        if (sortConfig.key === 'score') {
+            const scoreA = getThreatScore(a, !!oracleCache[a.id]?.text || !!a.explained);
+            const scoreB = getThreatScore(b, !!oracleCache[b.id]?.text || !!b.explained);
+            if (scoreA < scoreB) return sortConfig.direction === 'asc' ? -1 : 1;
+            if (scoreA > scoreB) return sortConfig.direction === 'asc' ? 1 : -1;
+            return 0;
+        } else { // sort by date
+            const dateA = new Date(a.detectedAt || 0).getTime();
+            const dateB = new Date(b.detectedAt || 0).getTime();
+            if (dateA < dateB) return sortConfig.direction === 'asc' ? -1 : 1;
+            if (dateA > dateB) return sortConfig.direction === 'asc' ? 1 : -1;
+            return 0;
+        }
+    });
+    
+    return filtered;
+
+  }, [threats, filterSeverity, unexplainedOnly, oracleCache, debouncedQuery, sortConfig]);
 
   const handleExplain = useCallback(async (threat: Threat) => {
     const insight = oracleCache[threat.id];
@@ -148,11 +175,9 @@ const ThreatScanner: React.FC<ThreatScannerProps> = ({ threats: initialThreats, 
 
     const TTL_MS = 24 * 60 * 60 * 1000;
     if (insight?.text && insight.fetchedAt && (Date.now() - insight.fetchedAt < TTL_MS)) {
-        console.log(`[DevTest] cache hit: true`, {id: threat.id});
-        setExpanded(e => ({ ...e, [threat.id]: true })); // Ensure it's visible if user clicks
+        setExpanded(e => ({ ...e, [threat.id]: true }));
         return;
     }
-    console.log(`[DevTest] cache miss: true`, {id: threat.id});
 
     playConfirm();
     setOracleCache(prev => ({
@@ -178,7 +203,6 @@ const ThreatScanner: React.FC<ThreatScannerProps> = ({ threats: initialThreats, 
         setOracleCache(prev => ({ ...prev, [threat.id]: { ...prev[threat.id]!, loading: false, text: null, error: res.text, fetchedAt: Date.now() }}));
     } else {
         setOracleCache(prev => ({ ...prev, [threat.id]: { ...prev[threat.id]!, loading: false, text: res.text, error: null, fetchedAt: Date.now() }}));
-        console.log(`[DevTest] cache write: true`, {id: threat.id});
     }
   }, [oracleCache, playConfirm, setOracleCache]);
   
@@ -195,6 +219,18 @@ const ThreatScanner: React.FC<ThreatScannerProps> = ({ threats: initialThreats, 
     playClick();
     setFilters(f => ({ ...f, unexplainedOnly: e.target.checked }));
   }
+  
+  const handleSort = (key: SortKey) => {
+    playClick();
+    setSortConfig(prev => {
+        if (prev.key === key) {
+            return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+        }
+        // Default to descending for new sort key
+        return { key, direction: 'desc' };
+    });
+  };
+
 
   return (
     <main className="threat-scanner p-4">
@@ -211,7 +247,7 @@ const ThreatScanner: React.FC<ThreatScannerProps> = ({ threats: initialThreats, 
 
         <div className="flex flex-col sm:flex-row gap-4 items-center">
             <div className="flex gap-2 items-center flex-wrap">
-              <span className="text-sm text-gray-400">Severity:</span>
+              <span className="text-sm text-gray-400">Filter:</span>
               {(['all', 'critical', 'high', 'medium', 'low'] as const).map(sev => (
                  <button key={sev} className={`pill capitalize ${filterSeverity === sev ? "pill-active" : ""}`} onMouseEnter={playHover} onClick={() => handleFilterClick(sev)}>{sev}</button>
               ))}
@@ -220,9 +256,18 @@ const ThreatScanner: React.FC<ThreatScannerProps> = ({ threats: initialThreats, 
                  Unexplained
               </label>
             </div>
-            <div className="flex-grow w-full sm:w-auto">
-                <input type="search" placeholder="Filter by title, reason, or ID..." value={query} onChange={handleQueryChange} className="w-full bg-zinc-900/50 border border-zinc-700 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 outline-none" />
+             <div className="flex-grow w-full sm:w-auto">
+                <input type="search" placeholder="Search threats..." value={query} onChange={handleQueryChange} className="w-full bg-zinc-900/50 border border-zinc-700 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 outline-none" />
             </div>
+        </div>
+         <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-400">Sort by:</span>
+            <button onClick={() => handleSort('score')} className={`pill text-xs ${sortConfig.key === 'score' ? 'pill-active' : ''}`}>
+                Score {sortConfig.key === 'score' && (sortConfig.direction === 'desc' ? '↓' : '↑')}
+            </button>
+            <button onClick={() => handleSort('date')} className={`pill text-xs ${sortConfig.key === 'date' ? 'pill-active' : ''}`}>
+                Date {sortConfig.key === 'date' && (sortConfig.direction === 'desc' ? '↓' : '↑')}
+            </button>
         </div>
       </header>
       
@@ -255,8 +300,8 @@ const ThreatScanner: React.FC<ThreatScannerProps> = ({ threats: initialThreats, 
                         <ThreatDetailsTabs threat={t} oracleInsight={oracleCache[t.id]} />
                         <div className="flex flex-wrap gap-2 mt-4">
                             <button className="btn ghost" onClick={() => handleExplain(t)} disabled={oracleCache[t.id]?.loading}>
-                               <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ${oracleCache[t.id]?.loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M9 7h6m-5 3h4m-3 3h2M4 12a8 8 0 1116 0c0 4.418-3.582 8-8 8s-8-3.582-8-8zm8-10v2m0 16v2m-8-9H2m20 0h-2m-3.9-5.1L4.5 7.5M19.5 7.5l-3.6 3.6" /></svg>
-                               {oracleCache[t.id]?.loading ? "Asking..." : oracleCache[t.id]?.text ? "Refresh Oracle" : "Ask the Oracle"}
+                               <GeminiIcon className={`h-4 w-4 ${oracleCache[t.id]?.loading ? 'animate-spin' : ''}`} />
+                               {oracleCache[t.id]?.loading ? "Asking..." : isExplained ? "Refresh Oracle" : "Ask the Oracle"}
                             </button>
                             <button className="btn" onClick={() => { playClick(); onChangeView(View.SECURITY_ADVISOR) }}>
                                 Security Advisor

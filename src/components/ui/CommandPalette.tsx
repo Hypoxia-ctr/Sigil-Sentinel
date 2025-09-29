@@ -24,6 +24,33 @@ const EnterIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M9 10l-5 5 5 5"></path><path d="M20 4v7a4 4 0 0 1-4 4H4"></path></svg>
 );
 
+// Minimal Levenshtein distance function for fuzzy search
+const levenshtein = (a: string, b: string): number => {
+    const an = a ? a.length : 0;
+    const bn = b ? b.length : 0;
+    if (an === 0) return bn;
+    if (bn === 0) return an;
+    const matrix = Array(bn + 1);
+    for (let i = 0; i <= bn; ++i) {
+        matrix[i] = [i];
+    }
+    const a_ch = a.split('');
+    const b_ch = b.split('');
+    for (let j = 1; j <= an; ++j) {
+        matrix[0][j] = j;
+    }
+    for (let i = 1; i <= bn; ++i) {
+        for (let j = 1; j <= an; ++j) {
+            const cost = b_ch[i-1] === a_ch[j-1] ? 0 : 1;
+            matrix[i][j] = Math.min(
+                matrix[i - 1][j] + 1,
+                matrix[i][j - 1] + 1,
+                matrix[i - 1][j - 1] + cost
+            );
+        }
+    }
+    return matrix[bn][an];
+};
 
 export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, commands }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -34,11 +61,46 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose,
   const filteredCommands = useMemo(() => {
     if (!searchTerm) return commands;
     const lowerCaseSearch = searchTerm.toLowerCase();
-    return commands.filter(cmd => 
-      cmd.title.toLowerCase().includes(lowerCaseSearch) ||
-      cmd.category.toLowerCase().includes(lowerCaseSearch) ||
-      (cmd.keywords && cmd.keywords.join(' ').toLowerCase().includes(lowerCaseSearch))
-    );
+
+    const getScore = (cmd: Command) => {
+      const title = cmd.title.toLowerCase();
+      const category = cmd.category.toLowerCase();
+      const keywords = (cmd.keywords || []).join(' ').toLowerCase();
+      let score = 0;
+
+      // Prioritize exact title matches
+      if (title === lowerCaseSearch) return 100;
+      // Prioritize matches at the start of the title
+      if (title.startsWith(lowerCaseSearch)) {
+        score += 50;
+      } else if (title.includes(lowerCaseSearch)) {
+        score += 20;
+      }
+
+      // Add fuzzy search score for title
+      const dist = levenshtein(lowerCaseSearch, title);
+      if (dist <= lowerCaseSearch.length / 2 && dist > 0) { // Only for typos, not exact matches
+        score += Math.max(0, 20 - dist * 5); // Higher score for lower distance
+      }
+
+      if (keywords.includes(lowerCaseSearch)) {
+        score += 10;
+      }
+      
+      if (category.toLowerCase().startsWith(lowerCaseSearch)) {
+          score += 5;
+      } else if (category.includes(lowerCaseSearch)) {
+          score += 2;
+      }
+
+      return score;
+    };
+    
+    return commands
+      .map(cmd => ({ ...cmd, score: getScore(cmd) }))
+      .filter(cmd => cmd.score > 0)
+      .sort((a, b) => b.score - a.score);
+      
   }, [searchTerm, commands]);
 
   // Reset search and active index when palette is opened/closed
@@ -55,13 +117,16 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose,
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isOpen) return;
+      
+      const commandsLength = filteredCommands.length;
+      if (commandsLength === 0) return;
 
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setActiveIndex(prev => (prev + 1) % filteredCommands.length);
+        setActiveIndex(prev => (prev + 1) % commandsLength);
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setActiveIndex(prev => (prev - 1 + filteredCommands.length) % filteredCommands.length);
+        setActiveIndex(prev => (prev - 1 + commandsLength) % commandsLength);
       } else if (e.key === 'Enter') {
         e.preventDefault();
         if (filteredCommands[activeIndex]) {

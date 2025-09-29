@@ -57,9 +57,9 @@ const StatusListItem: React.FC<{ label: string; status: ServiceStatus }> = ({ la
     };
     const styles = statusStyles[status];
     return (
-        <div key={status} className="flex items-center justify-between py-2 px-3 bg-black/20 rounded-md animate-status-pop-in">
+        <div className="flex items-center justify-between py-2 px-3 bg-black/20 rounded-md">
             <span className="text-gray-300">{label}</span>
-            <div className="flex items-center gap-2">
+            <div key={status} className="flex items-center gap-2 animate-status-pop-in">
                 <div className={`w-2 h-2 rounded-full animate-pulse ${styles.bg} ${styles.dot}`}></div>
                 <span className={`text-xs font-bold ${styles.text}`}>{status.toUpperCase()}</span>
             </div>
