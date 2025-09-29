@@ -76,6 +76,177 @@ export const useCopyToClipboard = () => {
   return { copy, copied };
 };
 
+/* ------------------------------------------------------------------
+ *  Copy button – small helper component
+ * ------------------------------------------------------------------*/
+interface CopyButtonProps {
+  id: string;
+  label: string;
+  script: string;
+  copy: (txt: string) => void;
+  isCopied: boolean;
+}
+const CopyButton = ({ id, label, script, copy, isCopied,}: CopyButtonProps) => {
+    const { playConfirm, playHover } = useSound();
+    return (
+      <button onMouseEnter={playHover} id={id} onClick={() => { playConfirm(); copy(script); }} className={`btn ghost text-xs ${ isCopied ? "border-emerald-500 text-emerald-300" : "border-zinc-700 hover:border-zinc-600 text-zinc-300"}`} aria-pressed={isCopied}>
+        <Terminal className="h-3.5 w-3.5" aria-hidden />
+        {isCopied ? "Copied" : label}
+      </button>
+    );
+};
+
+/* ------------------------------------------------------------------
+ *  Severity chip styling
+ * ------------------------------------------------------------------*/
+const sevChipColor = (sev: Severity, type: 'bg' | 'text' | 'border') => {
+  const colors: Record<Severity, Record<typeof type, string>> = {
+      low:      { bg: 'rgba(22, 163, 74, 0.1)', text: 'var(--lime)', border: 'rgba(22, 163, 74, 0.2)' },
+      medium:   { bg: 'rgba(245, 158, 11, 0.1)', text: 'var(--amber)', border: 'rgba(245, 158, 11, 0.2)' },
+      high:     { bg: 'rgba(192, 38, 211, 0.1)', text: 'var(--mag)', border: 'rgba(192, 38, 211, 0.2)' },
+      critical: { bg: 'rgba(220, 38, 38, 0.1)', text: 'var(--red)', border: 'rgba(220, 38, 38, 0.2)' },
+  };
+  return colors[sev]?.[type] || '';
+};
+
+/* ------------------------------------------------------------------
+ *  Component – FixActionItem
+ * ------------------------------------------------------------------*/
+interface FixActionItemProps {
+  fx: FixAction;
+  oracleInsight: AIInsightState | undefined;
+  onRequestFix?: (fx: FixAction) => void;
+  onGetAIInsight: (fx: FixAction) => void;
+  onFeedback: (fixId: string, feedback: 'up' | 'down') => void;
+  copy: (text: string) => void;
+  copied: string;
+}
+
+const FixActionItem: React.FC<FixActionItemProps> = ({
+  fx,
+  oracleInsight,
+  onRequestFix,
+  onGetAIInsight,
+  onFeedback,
+  copy,
+  copied,
+}) => {
+  const { playHover, playConfirm, playClick } = useSound();
+  const insightRef = useRef<HTMLDivElement>(null);
+  const oracleButtonText = oracleInsight?.loading ? "Asking the Oracle..." : oracleInsight?.text ? "Refresh Oracle" : "Ask the Oracle";
+
+  useEffect(() => {
+    if (oracleInsight?.text && !oracleInsight.loading) {
+      insightRef.current?.focus();
+    }
+  }, [oracleInsight]);
+
+  const glowColor = sevChipColor(fx.severity, 'text');
+
+  return (
+    <li
+      className="hx-glow-border p-4 bg-zinc-900/60 transition-all duration-300"
+      role="listitem"
+      style={{ '--glow-color': glowColor } as React.CSSProperties}
+    >
+      <div className="flex flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <SeveritySigil severity={fx.severity} />
+            <h3 className="font-semibold text-zinc-100 truncate">{fx.title}</h3>
+          </div>
+          <p className="mt-1 text-sm text-zinc-300">{fx.description}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <span className={`px-2 py-0.5 rounded-full border text-xs capitalize`} style={{ color: sevChipColor(fx.severity, 'text'), borderColor: sevChipColor(fx.severity, 'border'), backgroundColor: sevChipColor(fx.severity, 'bg') }}>{fx.severity}</span>
+            <span className="px-2 py-0.5 rounded-full border border-zinc-700 text-xs text-zinc-300">{fx.category}</span>
+            {fx.tags?.map(t => (<span key={t} className="px-2 py-0.5 rounded-full border border-zinc-700 text-xs text-zinc-400">#{t}</span>))}
+          </div>
+        </div>
+        <div className="shrink-0 flex flex-col items-end gap-2 self-start sm:self-center">
+           <button onClick={() => onGetAIInsight(fx)} onMouseEnter={playHover} disabled={oracleInsight?.loading} className={`btn text-sm ${oracleInsight?.loading ? "opacity-50 cursor-wait" : "text-fuchsia-300"}`}>
+              <GeminiIcon className={`h-4 w-4 ${oracleInsight?.loading ? 'animate-spin' : ''}`} /> {oracleButtonText}
+           </button>
+           <button onClick={() => { playConfirm(); onRequestFix?.(fx); }} onMouseEnter={playHover} disabled={!onRequestFix} className={`btn text-sm ${!onRequestFix ? "opacity-50 cursor-not-allowed" : "text-cyan-300"}`} aria-label={`Request fix for ${fx.title}`} >
+            <Wrench className="h-4 w-4" /> Queue Fix
+          </button>
+          {fx.scripts && (
+            <div className="flex flex-wrap gap-2 justify-end">
+              {fx.scripts.windows && (<CopyButton id={`${fx.id}-win`} label="Win" script={fx.scripts.windows} copy={copy} isCopied={copied === fx.scripts.windows}/>)}
+              {fx.scripts.linux && (<CopyButton id={`${fx.id}-li`} label="Linux" script={fx.scripts.linux} copy={copy} isCopied={copied === fx.scripts.linux} />)}
+              {fx.scripts.mac && (<CopyButton id={`${fx.id}-mac`} label="macOS" script={fx.scripts.mac} copy={copy} isCopied={copied === fx.scripts.mac}/>)}
+            </div>
+          )}
+        </div>
+      </div>
+      {oracleInsight && (
+        <div className="mt-4 pt-4 border-t border-fuchsia-500/20 animate-fade-in" aria-live="polite">
+            {oracleInsight.loading && (
+                <div className="flex items-center gap-3 text-fuchsia-300">
+                    <GeminiIcon className="h-5 w-5 animate-spin" />
+                    <p className="text-sm">The Oracle is contemplating...</p>
+                </div>
+            )}
+            {oracleInsight.error && (
+                <div className="p-3 rounded-lg bg-red-900/30 border border-red-500/30 text-red-300 text-sm">
+                   <p className="font-semibold">Error:</p>
+                   <p>{oracleInsight.error}</p>
+                </div>
+            )}
+            {oracleInsight.text && (
+                <div 
+                    ref={insightRef} 
+                    tabIndex={-1} 
+                    className="text-zinc-300 max-w-none focus:outline-none focus:ring-1 focus:ring-fuchsia-500 rounded"
+                >
+                    <pre className="whitespace-pre-wrap font-serif text-sm">
+                        {oracleInsight.text}
+                    </pre>
+                    <p className="text-xs text-zinc-400 mt-4 italic">
+                        Explained by Gemini Proxy on {new Date(oracleInsight.fetchedAt || Date.now()).toLocaleDateString()}.
+                    </p>
+                    <div className="mt-4 flex items-center gap-4">
+                        <p className="text-xs text-zinc-400 m-0">Was this explanation helpful?</p>
+                        <button
+                            onClick={() => { playClick(); onFeedback(fx.id, 'up'); }}
+                            onMouseEnter={playHover}
+                            disabled={!!oracleInsight.feedback}
+                            aria-pressed={oracleInsight.feedback === 'up'}
+                            className={`p-1.5 rounded-full transition-colors ${
+                                oracleInsight.feedback === 'up'
+                                    ? 'bg-emerald-500/20 text-emerald-500'
+                                    : 'hover:bg-zinc-700 disabled:opacity-50'
+                            }`}
+                            aria-label="Helpful"
+                        >
+                            <ThumbsUp className="h-4 w-4" />
+                        </button>
+                        <button
+                            onClick={() => { playClick(); onFeedback(fx.id, 'down'); }}
+                            onMouseEnter={playHover}
+                            disabled={!!oracleInsight.feedback}
+                            aria-pressed={oracleInsight.feedback === 'down'}
+                            className={`p-1.5 rounded-full transition-colors ${
+                                oracleInsight.feedback === 'down'
+                                    ? 'bg-rose-500/20 text-rose-500'
+                                    : 'hover:bg-zinc-700 disabled:opacity-50'
+                            }`}
+                            aria-label="Not helpful"
+                        >
+                            <ThumbsDown className="h-4 w-4" />
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+      )}
+      {fx.references && fx.references.length > 0 && (
+        <div className="mt-3 text-xs text-zinc-400 flex flex-wrap gap-3 border-t border-zinc-700/50 pt-2">
+          {fx.references.map(r => (<a key={r.href} href={r.href} target="_blank" rel="noreferrer" className="underline hover:text-cyan-300 hover:no-underline">{r.label}</a>))}
+        </div>
+      )}
+    </li>
+  );
+}
 
 /* ------------------------------------------------------------------
  *  UI component – SecurityAdvisor
@@ -109,7 +280,6 @@ const SecurityAdvisor: React.FC<SecurityAdvisorProps> = ({
   );
   const { normalized } = useRiskScore(actions);
   const { copy, copied } = useCopyToClipboard();
-  const insightRef = useRef<HTMLDivElement>(null);
   const { playClick, playHover, playConfirm } = useSound();
 
   const severityCounts = useMemo(() => {
@@ -117,15 +287,7 @@ const SecurityAdvisor: React.FC<SecurityAdvisorProps> = ({
     actions.forEach(a => counts[a.severity]++);
     return counts;
   }, [actions]);
-
-  useEffect(() => {
-    const insightWithText = Object.values(oracleCache).find(i => i.text && !i.loading);
-    if (insightWithText) {
-      insightRef.current?.focus();
-    }
-  }, [oracleCache]);
   
-
   const handleGetAIInsight = useCallback(async (fixAction: FixAction) => {
     playConfirm();
     const insight = oracleCache[fixAction.id];
@@ -166,7 +328,6 @@ const SecurityAdvisor: React.FC<SecurityAdvisorProps> = ({
   }, [signals, oracleCache, playConfirm, setOracleCache]);
 
   const handleFeedback = (fixId: string, feedback: 'up' | 'down') => {
-    playClick();
     const insight = oracleCache[fixId];
     if (!insight || !insight.text) return;
     
@@ -253,108 +414,18 @@ const SecurityAdvisor: React.FC<SecurityAdvisorProps> = ({
         </div>
       ) : (
         <ul className="space-y-3" role="list">
-          {filtered.map(fx => {
-            const insight = oracleCache[fx.id];
-            const oracleButtonText = insight?.loading ? "Asking the Oracle..." : insight?.text ? "Refresh Oracle" : "Ask the Oracle";
-            return (
-            <li key={fx.id} className="hx-glow-border p-4 bg-zinc-900/60 transition-all duration-300" role="listitem">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-4">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <SeveritySigil severity={fx.severity} />
-                    <h3 className="font-semibold text-zinc-100 truncate">{fx.title}</h3>
-                  </div>
-                  <p className="mt-1 text-sm text-zinc-300">{fx.description}</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <span className={`px-2 py-0.5 rounded-full border text-xs capitalize`} style={{ color: sevChipColor(fx.severity, 'text'), borderColor: sevChipColor(fx.severity, 'border'), backgroundColor: sevChipColor(fx.severity, 'bg') }}>{fx.severity}</span>
-                    <span className="px-2 py-0.5 rounded-full border border-zinc-700 text-xs text-zinc-300">{fx.category}</span>
-                    {fx.tags?.map(t => (<span key={t} className="px-2 py-0.5 rounded-full border border-zinc-700 text-xs text-zinc-400">#{t}</span>))}
-                  </div>
-                </div>
-                <div className="shrink-0 flex flex-col items-end gap-2 self-start sm:self-center">
-                   <button onClick={() => handleGetAIInsight(fx)} onMouseEnter={playHover} disabled={insight?.loading} className={`btn text-sm ${insight?.loading ? "opacity-50 cursor-wait" : "text-fuchsia-300"}`}>
-                      <GeminiIcon className={`h-4 w-4 ${insight?.loading ? 'animate-spin' : ''}`} /> {oracleButtonText}
-                   </button>
-                   <button onClick={() => { playConfirm(); onRequestFix?.(fx); }} onMouseEnter={playHover} disabled={!onRequestFix} className={`btn text-sm ${!onRequestFix ? "opacity-50 cursor-not-allowed" : "text-cyan-300"}`} aria-label={`Request fix for ${fx.title}`} >
-                    <Wrench className="h-4 w-4" /> Queue Fix
-                  </button>
-                  {fx.scripts && (
-                    <div className="flex flex-wrap gap-2 justify-end">
-                      {fx.scripts.windows && (<CopyButton id={`${fx.id}-win`} label="Win" script={fx.scripts.windows} copy={copy} isCopied={copied === fx.scripts.windows}/>)}
-                      {fx.scripts.linux && (<CopyButton id={`${fx.id}-li`} label="Linux" script={fx.scripts.linux} copy={copy} isCopied={copied === fx.scripts.linux} />)}
-                      {fx.scripts.mac && (<CopyButton id={`${fx.id}-mac`} label="macOS" script={fx.scripts.mac} copy={copy} isCopied={copied === fx.scripts.mac}/>)}
-                    </div>
-                  )}
-                </div>
-              </div>
-              {insight && (
-                <div className="mt-4 pt-4 border-t border-fuchsia-500/20 animate-fade-in" aria-live="polite">
-                    {insight.loading && (
-                        <div className="flex items-center gap-3 text-fuchsia-300">
-                            <GeminiIcon className="h-5 w-5 animate-spin" />
-                            <p className="text-sm">The Oracle is contemplating...</p>
-                        </div>
-                    )}
-                    {insight.error && (
-                        <div className="p-3 rounded-lg bg-red-900/30 border border-red-500/30 text-red-300 text-sm">
-                           <p className="font-semibold">Error:</p>
-                           <p>{insight.error}</p>
-                        </div>
-                    )}
-                    {insight.text && (
-                        <div 
-                            ref={insightRef} 
-                            tabIndex={-1} 
-                            className="text-zinc-300 max-w-none focus:outline-none focus:ring-1 focus:ring-fuchsia-500 rounded"
-                        >
-                            <pre className="whitespace-pre-wrap font-serif text-sm">
-                                {insight.text}
-                            </pre>
-                            <p className="text-xs text-zinc-400 mt-4 italic">
-                                Explained by Gemini Proxy on {new Date(insight.fetchedAt || Date.now()).toLocaleDateString()}.
-                            </p>
-                            <div className="mt-4 flex items-center gap-4">
-                                <p className="text-xs text-zinc-400 m-0">Was this explanation helpful?</p>
-                                <button
-                                    onClick={() => handleFeedback(fx.id, 'up')}
-                                    onMouseEnter={playHover}
-                                    disabled={!!insight.feedback}
-                                    aria-pressed={insight.feedback === 'up'}
-                                    className={`p-1.5 rounded-full transition-colors ${
-                                        insight.feedback === 'up'
-                                            ? 'bg-emerald-500/20 text-emerald-500'
-                                            : 'hover:bg-zinc-700 disabled:opacity-50'
-                                    }`}
-                                    aria-label="Helpful"
-                                >
-                                    <ThumbsUp className="h-4 w-4" />
-                                </button>
-                                <button
-                                    onClick={() => handleFeedback(fx.id, 'down')}
-                                    onMouseEnter={playHover}
-                                    disabled={!!insight.feedback}
-                                    aria-pressed={insight.feedback === 'down'}
-                                    className={`p-1.5 rounded-full transition-colors ${
-                                        insight.feedback === 'down'
-                                            ? 'bg-rose-500/20 text-rose-500'
-                                            : 'hover:bg-zinc-700 disabled:opacity-50'
-                                    }`}
-                                    aria-label="Not helpful"
-                                >
-                                    <ThumbsDown className="h-4 w-4" />
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-              )}
-              {fx.references && fx.references.length > 0 && (
-                <div className="mt-3 text-xs text-zinc-400 flex flex-wrap gap-3 border-t border-zinc-700/50 pt-2">
-                  {fx.references.map(r => (<a key={r.href} href={r.href} target="_blank" rel="noreferrer" className="underline hover:text-cyan-300 hover:no-underline">{r.label}</a>))}
-                </div>
-              )}
-            </li>
-          )}})}
+          {filtered.map(fx => (
+            <FixActionItem
+              key={fx.id}
+              fx={fx}
+              oracleInsight={oracleCache[fx.id]}
+              onRequestFix={onRequestFix}
+              onGetAIInsight={handleGetAIInsight}
+              onFeedback={handleFeedback}
+              copy={copy}
+              copied={copied}
+            />
+          ))}
         </ul>
       )}
       <div className="text-xs text-zinc-500 flex items-center gap-2" role="note">
@@ -364,38 +435,5 @@ const SecurityAdvisor: React.FC<SecurityAdvisorProps> = ({
     </div>
   );
 }
-
-/* ------------------------------------------------------------------
- *  Copy button – small helper component
- * ------------------------------------------------------------------*/
-interface CopyButtonProps {
-  id: string;
-  label: string;
-  script: string;
-  copy: (txt: string) => void;
-  isCopied: boolean;
-}
-const CopyButton = ({ id, label, script, copy, isCopied,}: CopyButtonProps) => {
-    const { playConfirm, playHover } = useSound();
-    return (
-      <button onMouseEnter={playHover} id={id} onClick={() => { playConfirm(); copy(script); }} className={`btn ghost text-xs ${ isCopied ? "border-emerald-500 text-emerald-300" : "border-zinc-700 hover:border-zinc-600 text-zinc-300"}`} aria-pressed={isCopied}>
-        <Terminal className="h-3.5 w-3.5" aria-hidden />
-        {isCopied ? "Copied" : label}
-      </button>
-    );
-};
-
-/* ------------------------------------------------------------------
- *  Severity chip styling
- * ------------------------------------------------------------------*/
-const sevChipColor = (sev: Severity, type: 'bg' | 'text' | 'border') => {
-  const colors: Record<Severity, Record<typeof type, string>> = {
-      low:      { bg: 'rgba(22, 163, 74, 0.1)', text: '#6ee7b7', border: 'rgba(22, 163, 74, 0.2)' },
-      medium:   { bg: 'rgba(245, 158, 11, 0.1)', text: '#fbbf24', border: 'rgba(245, 158, 11, 0.2)' },
-      high:     { bg: 'rgba(192, 38, 211, 0.1)', text: '#f0abfc', border: 'rgba(192, 38, 211, 0.2)' },
-      critical: { bg: 'rgba(220, 38, 38, 0.1)', text: '#fca5a5', border: 'rgba(220, 38, 38, 0.2)' },
-  };
-  return colors[sev]?.[type] || '';
-};
 
 export default SecurityAdvisor;

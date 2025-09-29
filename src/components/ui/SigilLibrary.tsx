@@ -1,6 +1,5 @@
 import React from 'react';
-import SigilMark, { SigilName } from './SigilMark';
-import { useTheme, Theme } from './ThemeProvider';
+import SigilMark, { SigilName } from '../common/SigilMark';
 
 const SIGIL_DETAILS: { name: SigilName; title: string; description: string }[] = [
     { name: 'warding', title: 'Aegis of Warding', description: 'A protective sigil that reinforces defensive boundaries.' },
@@ -8,12 +7,6 @@ const SIGIL_DETAILS: { name: SigilName; title: string; description: string }[] =
     { name: 'channeling', title: 'Rune of Channeling', description: 'A sigil that focuses and amplifies arcane energies.' },
     { name: 'elderTech', title: 'Elder-Tech Grid', description: 'A complex sigil that maps and analyzes arcane data flows.'},
     { name: 'draconic', title: 'Draconic Storm', description: 'Channels raw chaotic energies, offering immense power and insight.' }
-];
-
-const THEMES: { name: Theme; title: string }[] = [
-    { name: 'dark', title: 'Default Dark' },
-    { name: 'light', title: 'Light Arcane' },
-    { name: 'arcane', title: 'Arcane Night' }
 ];
 
 interface SigilLibraryProps {
@@ -24,7 +17,6 @@ interface SigilLibraryProps {
 }
 
 const SigilLibrary: React.FC<SigilLibraryProps> = ({ isOpen, onClose, onSelectSigil, currentSigil }) => {
-  const { theme, setTheme } = useTheme();
   if (!isOpen) return null;
 
   return (
@@ -41,6 +33,7 @@ const SigilLibrary: React.FC<SigilLibraryProps> = ({ isOpen, onClose, onSelectSi
               className={`sigil-library__card ${currentSigil === sigil.name ? 'active' : ''}`}
               onClick={() => {
                 onSelectSigil(sigil.name);
+                onClose();
               }}
               aria-pressed={currentSigil === sigil.name}
               aria-label={`Select ${sigil.title}`}
@@ -50,25 +43,6 @@ const SigilLibrary: React.FC<SigilLibraryProps> = ({ isOpen, onClose, onSelectSi
               <p>{sigil.description}</p>
             </button>
           ))}
-        </div>
-        <div className="sigil-library__header mt-6 border-t border-cyan-500/10 pt-4">
-            <h2 className="text-2xl font-bold text-cyan-400">Interface Theme</h2>
-            <p className="text-sm text-gray-400">Select a color scheme for the dashboard.</p>
-        </div>
-        <div className="sigil-library__theme-selector">
-            {THEMES.map(t => (
-                <button 
-                    key={t.name}
-                    className={`theme-card ${theme === t.name ? 'active' : ''}`}
-                    onClick={() => setTheme(t.name)}
-                    aria-pressed={theme === t.name}
-                >
-                    <div className={`theme-preview theme-preview--${t.name}`}>
-                        <span className="c1"></span><span className="c2"></span><span className="c3"></span><span className="c4"></span>
-                    </div>
-                    {t.title}
-                </button>
-            ))}
         </div>
       </div>
     </div>

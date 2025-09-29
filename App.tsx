@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Navigation from './components/Navigation';
 // FIX: Imported Signal and FixAction from types.ts where they are defined, instead of from SecurityAdvisor.tsx
-import { View, Signal, FixAction, AIInsightState } from './types';
+import { View, Signal, FixAction, AIInsightState, AuditQueueItem, Threat } from './types';
 import Dashboard from './components/views/Dashboard';
 import FileAnalyzer from './components/views/FileAnalyzer';
 import SystemMonitor from './components/views/SystemMonitor';
@@ -13,6 +13,7 @@ import MLFrameworkDemo from './components/views/MLFrameworkDemo';
 import AegisHardener from './components/views/AegisHardener';
 import AdminConsole from './components/views/AdminConsole';
 import DataLossPrevention from './components/views/DataLossPrevention';
+import AuditQueueView from './components/views/AuditQueueView';
 import { CommandPalette, Command } from './components/CommandPalette';
 import { NAVIGATION_ITEMS } from './constants';
 import SigilLibrary from './components/SigilLibrary';
@@ -20,6 +21,9 @@ import { SigilName } from './components/SigilMark';
 import { usePreserveScroll } from './hooks/usePreserveScroll';
 import { ToastProvider, useToast } from './hooks/useToast';
 import { ToastContainer } from './components/Toast';
+import { loadAuditQueue, addToAuditQueue, removeFromAuditQueue, clearAuditQueue } from './lib/storage';
+import QueueFixPrompt from './components/QueueFixPrompt';
+import { ThemeProvider } from './components/ThemeProvider';
 
 const mockSignals: Signal[] = [
   { key: 'firewall.enabled', label: 'Firewall Status', category: 'Network', value: false, at: new Date().toISOString() },
@@ -27,6 +31,39 @@ const mockSignals: Signal[] = [
   { key: 'auth.password_policy', label: 'Password Policy', category: 'Auth', value: { minLength: 6 }, at: new Date().toISOString() },
   { key: 'privacy.telemetry', label: 'Telemetry', category: 'Privacy', value: true },
   { key: 'endpoint.antivirus', label: 'Antivirus', category: 'Endpoint', value: 'active' }
+];
+
+const MOCK_THREATS: Threat[] = [
+  {
+    id: "T-2025-0001",
+    title: "Unsigned binary executed: wrm.exe",
+    reason: "Unsigned executable spawned from temp dir",
+    detectedAt: new Date().toISOString(),
+    source: "File Analyzer",
+    severity: "high",
+    details: "Parent: explorer.exe, Cmdline: C:\\Windows\\Temp\\wrm.exe --connect 192.168.1.2:443",
+    explained: true,
+  },
+  {
+    id: "T-2025-0002",
+    title: "Gateway change detected",
+    reason: "Default gateway shifted to suspicious host 192.168.1.254",
+    detectedAt: new Date().toISOString(),
+    source: "Network Monitor",
+    severity: "medium",
+    details: "Previous gateway 192.168.1.1 -> 192.168.1.254",
+    explained: false,
+  },
+  {
+    id: "T-2025-0003",
+    title: "High entropy blob detected (packed file)",
+    reason: "Entropy > 7.8",
+    detectedAt: new Date().toISOString(),
+    source: "File Analyzer",
+    severity: "critical",
+    details: "SHA256: abcdef...; size 2.7MB; suspicious extension: .bin",
+    explained: false,
+  },
 ];
 
 const ORACLE_CACHE_KEY = 'sigil-sentinel-oracle-cache';
@@ -43,6 +80,7 @@ const AppContent: React.FC = () => {
   const [activeSigil, setActiveSigil] = useState<SigilName>('warding');
   const [isSigilLibraryOpen, setSigilLibraryOpen] = useState(false);
   const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [isQueuePromptOpen, setQueuePromptOpen] = useState(false);
   
   const [oracleCache, setOracleCache] = useState<Record<string, AIInsightState>>(() => {
     try {
@@ -54,6 +92,7 @@ const AppContent: React.FC = () => {
     }
   });
 
+  const [auditQueue, setAuditQueue] = useState<AuditQueueItem[]>(() => loadAuditQueue());
   const { addToast } = useToast();
   
   usePreserveScroll("sigil:scroll:main", "main", { debounceMs: 140 });
@@ -103,6 +142,31 @@ const AppContent: React.FC = () => {
     setOracleCache({});
     addToast({ title: 'Oracle Cache Cleared', message: 'All cached explanations have been removed.', type: 'info' });
   }, [addToast]);
+  
+  const handleQueueFix = useCallback((item: { id: string, title: string, severity: AuditQueueItem['severity'] }) => {
+    const newQueueItem: AuditQueueItem = {
+      id: item.id,
+      title: item.title,
+      severity: item.severity,
+      timestamp: Date.now(),
+    };
+    const updatedQueue = addToAuditQueue(newQueueItem);
+    setAuditQueue(updatedQueue);
+    addToast({ title: 'Fix Queued', message: `Fix for "${item.title}" was added to the audit queue.`, type: 'info' });
+    setQueuePromptOpen(false); // Close prompt if it was open
+  }, [addToast]);
+
+  const handleRemoveFromQueue = useCallback((timestamp: number) => {
+    const updatedQueue = removeFromAuditQueue(item => item.timestamp === timestamp);
+    setAuditQueue(updatedQueue);
+    addToast({ title: 'Item Removed', message: 'Item removed from the audit queue.', type: 'info' });
+  }, [addToast]);
+
+  const handleClearQueue = useCallback(() => {
+    clearAuditQueue();
+    setAuditQueue([]);
+    addToast({ title: 'Queue Cleared', message: 'The audit queue has been cleared.', type: 'info' });
+  }, [addToast]);
 
   // Define commands for the palette
   const commands = useMemo<Command[]>(() => [
@@ -114,6 +178,14 @@ const AppContent: React.FC = () => {
       action: () => setView(item.view),
       keywords: [item.view.toLowerCase().replace('_', ' ')]
     })),
+    {
+      id: 'action-queue-fix',
+      title: 'Queue a Fix for Audit',
+      category: 'Actions',
+      icon: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>,
+      action: () => setQueuePromptOpen(true),
+      keywords: ['queue', 'fix', 'audit', 'ticket']
+    },
     {
       id: 'action-scan',
       title: 'Initiate Threat Scan',
@@ -140,31 +212,27 @@ const AppContent: React.FC = () => {
     }
   ], [setView, handleClearOracleCache]);
 
-  const handleRequestFix = (fix: FixAction) => {
-    console.log('Fix requested:', fix);
-    addToast({ title: 'Fix Queued', message: `Request to apply fix "${fix.title}" has been sent.`, type: 'info' });
-  };
-
   const renderView = () => {
     switch (view) {
       case View.DASHBOARD: return <Dashboard onChangeView={setView} />;
       case View.FILE_ANALYZER: return <FileAnalyzer onChangeView={setView} />;
       case View.SYSTEM_MONITOR: return <SystemMonitor />;
-      case View.SECURITY_ADVISOR: return <SecurityAdvisor signals={mockSignals} onRequestFix={handleRequestFix} oracleCache={oracleCache} setOracleCache={setOracleCache} onClearOracleCache={handleClearOracleCache} />;
-      case View.THREAT_SCANNER: return <ThreatScanner onChangeView={setView} oracleCache={oracleCache} setOracleCache={setOracleCache} />;
+      case View.SECURITY_ADVISOR: return <SecurityAdvisor signals={mockSignals} onRequestFix={handleQueueFix} oracleCache={oracleCache} setOracleCache={setOracleCache} onClearOracleCache={handleClearOracleCache} />;
+      case View.THREAT_SCANNER: return <ThreatScanner onChangeView={setView} oracleCache={oracleCache} setOracleCache={setOracleCache} onRequestFix={handleQueueFix} threats={MOCK_THREATS} />;
       case View.SYSTEM_HARDENER: return <SystemHardener />;
       case View.SUBNET_MESSENGER: return <SubnetMessenger />;
       case View.ML_FRAMEWORK_DEMO: return <MLFrameworkDemo />;
       case View.AEGIS_HARDENER: return <AegisHardener />;
       case View.ADMIN_CONSOLE: return <AdminConsole />;
       case View.DATA_LOSS_PREVENTION: return <DataLossPrevention />;
+      case View.AUDIT_QUEUE: return <AuditQueueView items={auditQueue} onRemove={handleRemoveFromQueue} onClear={handleClearQueue} />;
       default: return <Dashboard onChangeView={setView} />;
     }
   };
 
   return (
     <>
-      <div className="flex h-screen bg-ink-900 text-gray-200 font-mono bg-grid">
+      <div className="app-layout flex h-screen bg-ink-900 text-gray-200 font-mono bg-grid">
         <Navigation 
           activeView={view} 
           onChangeView={setView} 
@@ -188,6 +256,12 @@ const AppContent: React.FC = () => {
         onSelectSigil={handleSelectSigil}
         currentSigil={activeSigil}
       />
+      <QueueFixPrompt 
+        isOpen={isQueuePromptOpen}
+        onClose={() => setQueuePromptOpen(false)}
+        onQueue={handleQueueFix}
+        threats={MOCK_THREATS}
+      />
       <ToastContainer />
     </>
   );
@@ -196,7 +270,9 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => (
   <ToastProvider>
-    <AppContent />
+    <ThemeProvider>
+      <AppContent />
+    </ThemeProvider>
   </ToastProvider>
 );
 
