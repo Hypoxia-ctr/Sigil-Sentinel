@@ -183,19 +183,17 @@ const AppContent: React.FC = () => {
 
   return (
     <>
-      <div className="app-layout bg-ink-900 text-gray-200 font-sans bg-grid">
+      <div className="app-layout bg-ink-900 text-gray-200 font-sans">
         <Sidebar 
           activeView={view} 
           onChangeView={setView} 
           onOpenSigilLibrary={() => setSigilLibraryOpen(true)}
           activeSigilName={activeSigil}
         />
-        <div className="flex-1 flex flex-col overflow-hidden">
-           <Topbar title={currentViewTitle} onOpenCommandPalette={() => setCommandPaletteOpen(true)} onChangeView={setView} setView={setView} />
-           <div id="main-content" className="main-content flex-1">
-              {renderView()}
-           </div>
-        </div>
+        <Topbar title={currentViewTitle} onOpenCommandPalette={() => setCommandPaletteOpen(true)} />
+        <main id="main-content" className="main-content bg-grid">
+          {renderView()}
+        </main>
       </div>
       {error && <ErrorOverlay message={error} onRetry={fetchData} />}
       <CommandPalette isOpen={isCommandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} commands={commands} />
